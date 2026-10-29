@@ -23,14 +23,24 @@ from core.ocr_engine import extract_header_info_ocr
 from core.student_roster_handler import lookup_student_in_roster
 
 
-ANNOTATED_DIR = os.path.join(PROJECT_ROOT, "data", "annotated")
+# Thư mục lưu ảnh chấm điểm mặc định (tương đối với thư mục dữ liệu của dự án)
+from core.storage_manager import get_data_dir
+
+
+def _get_annotated_dir() -> str:
+    """Lấy thư mục lưu ảnh annotated từ thư mục data hiện tại (không hardcode)"""
+    return os.path.join(get_data_dir(), "annotated")
+
+
+ANNOTATED_DIR = os.path.join(PROJECT_ROOT, "data", "annotated")  # default fallback
 
 
 def set_annotated_dir(custom_path: str):
     """Cho phép tùy biến thư mục lưu ảnh chấm điểm"""
     global ANNOTATED_DIR
     ANNOTATED_DIR = os.path.abspath(custom_path)
-    os.makedirs(ANNOTATED_DIR, exist_ok=True)
+    annotated_dir = _get_annotated_dir()
+    os.makedirs(annotated_dir, exist_ok=True)
 
 
 def get_annotated_dir() -> str:
@@ -47,7 +57,8 @@ def process_single_submission(
     Xử lý chấm trọn gói một bài thi từ đường dẫn ảnh chụp.
     Kết hợp: Căn chỉnh ảnh -> Bóc tách OMR -> Nhận diện OCR -> Đối chiếu DS Excel -> Chấm điểm
     """
-    os.makedirs(ANNOTATED_DIR, exist_ok=True)
+    annotated_dir = _get_annotated_dir()
+    os.makedirs(annotated_dir, exist_ok=True)
     filename = os.path.basename(image_path)
     base_id = os.path.splitext(filename)[0]
 
@@ -130,7 +141,7 @@ def process_single_submission(
                 f"CAN KIEM TRA: MA DE '{detected_code}' KHONG HOP LE", 
                 (100, 55), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 2
             )
-            annotated_path = os.path.join(ANNOTATED_DIR, f"result_{filename}")
+            annotated_path = os.path.join(annotated_dir, f"result_{filename}")
             imwrite_utf8(annotated_path, annotated_canvas)
             submission.annotated_image_path = annotated_path
             return submission
@@ -166,7 +177,7 @@ def process_single_submission(
             score_info=grade_result
         )
 
-        annotated_path = os.path.join(ANNOTATED_DIR, f"result_{filename}")
+        annotated_path = os.path.join(annotated_dir, f"result_{filename}")
         imwrite_utf8(annotated_path, annotated_img)
         submission.annotated_image_path = annotated_path
 

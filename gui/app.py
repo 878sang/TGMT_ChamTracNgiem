@@ -35,6 +35,7 @@ from core.student_roster_handler import (
     lookup_student_in_roster
 )
 from core.exam_processor import process_single_submission
+from core.image_alignment import align_paper
 from core.grading_engine import grade_full_mcq, grade_thpt_2025
 from core.visualizer import draw_grading_overlay
 from core.cv_utils import imread_utf8, imwrite_utf8
@@ -302,7 +303,7 @@ class OMRGradingApp(ctk.CTk):
         self.rb_full.pack(side="left", padx=(0, 15))
 
         ctk.CTkLabel(mode_full_row, text="Số câu hỏi:", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
-        self.cbo_num_q = ctk.CTkComboBox(mode_full_row, values=["40", "20"], width=80)
+        self.cbo_num_q = ctk.CTkComboBox(mode_full_row, values=["40", "20", "50"], width=80)
         self.cbo_num_q.set("40")
         self.cbo_num_q.pack(side="left", padx=5)
 
@@ -1093,12 +1094,10 @@ class OMRGradingApp(ctk.CTk):
             else:
                 new_submissions.append(sub)
 
-        # Lưu vào storage
-        self.current_submissions = new_submissions
-        save_submissions(self.current_exam.exam_id, self.current_submissions)
-
-        # Chuyển toàn bộ cập nhật giao diện hoàn tất về luồng chính
+        # Chuyển toàn bộ cập nhật dữ liệu và giao diện về luồng chính (Thread-safe)
         def on_grading_complete():
+            self.current_submissions = new_submissions
+            save_submissions(self.current_exam.exam_id, self.current_submissions)
             self.lbl_progress.configure(text=f"Hoàn thành! Đã chấm xong {total} bài thi.")
             self.btn_start_grading.configure(state="normal")
             self.render_submission_table()
@@ -1247,7 +1246,13 @@ class OMRGradingApp(ctk.CTk):
             ans_dict = sub.extracted_data.get("answers", {})
             active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
             if not active_key and self.current_exam.answer_keys:
-                active_key = list(self.current_exam.answer_keys.values())[0]
+                valid_codes = ", ".join(self.current_exam.answer_keys.keys()) or "Chưa có"
+                ctk.CTkLabel(
+                    right_frame,
+                    text=f"⚠️ Mã đề '{sub.exam_code}' không có đáp án! (Mã hợp lệ: {valid_codes}). Hãy sửa mã đề rồi bấm 'Lưu & Chấm lại'.",
+                    text_color="#C0392B", font=ctk.CTkFont(weight="bold", size=12),
+                    wraplength=420, justify="left"
+                ).pack(anchor="w", pady=5, padx=5)
             _num_q_editor = getattr(self.current_exam, "num_questions", 40) or 40
 
             for q_i in range(1, _num_q_editor + 1):
@@ -1277,7 +1282,13 @@ class OMRGradingApp(ctk.CTk):
         else:
             active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
             if not active_key and self.current_exam.answer_keys:
-                active_key = list(self.current_exam.answer_keys.values())[0]
+                valid_codes = ", ".join(self.current_exam.answer_keys.keys()) or "Chưa có"
+                ctk.CTkLabel(
+                    right_frame,
+                    text=f"⚠️ Mã đề '{sub.exam_code}' không có đáp án! (Mã hợp lệ: {valid_codes}). Hãy sửa mã đề rồi bấm 'Lưu & Chấm lại'.",
+                    text_color="#C0392B", font=ctk.CTkFont(weight="bold", size=12),
+                    wraplength=420, justify="left"
+                ).pack(anchor="w", pady=5, padx=5)
 
             # PHẦN I
             ctk.CTkLabel(right_frame, text="[Phần I: 12 câu 4 lựa chọn]", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
@@ -1473,11 +1484,6 @@ class OMRGradingApp(ctk.CTk):
             lbl_modal_score.configure(text=f"Tổng điểm: {sub.total_score:.2f} / 10.0")
             messagebox.showinfo("Thành công", f"Đã cập nhật bài làm! Điểm số mới: {sub.total_score:.2f}")
 
-            # Lưu vào storage
-            save_submissions(self.current_exam.exam_id, self.current_submissions)
-            self.render_submission_table()
-            lbl_modal_score.configure(text=f"Tổng điểm: {sub.total_score:.2f} / 10.0")
-            messagebox.showinfo("Thành công", f"Đã cập nhật bài làm! Điểm số mới: {sub.total_score:.2f}")
 
         btn_save_regrade = ctk.CTkButton(
             btn_action_box, text="💾 LƯU & CHẤM LẠI BÀI NÀY", height=40,

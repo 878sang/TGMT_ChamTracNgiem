@@ -238,7 +238,7 @@
     "student_id": "",
     "student_name": "",
     "exam_code": "101",
-    "image_path": "D:/Thị giác máy tính/Đồ Án/Screenshot 2026-10-07 091635.png",
+    "image_path": "C:/Users/NB MANH/.gemini/antigravity/scratch/TGMT_ChamTracNgiem/Screenshot 2026-10-07 091635.png",
     "annotated_image_path": "",
     "extracted_data": {},
     "ocr_data": {},
@@ -251,7 +251,7 @@
     "blank_count": 0,
     "status": "Lỗi",
     "needs_review": false,
-    "error_message": "Không tìm thấy 4 góc định vị hoặc viền phiếu. Vui lòng chụp rõ toàn bộ tờ phiếu!"
+    "error_message": "Không xác định đủ 4 marker định vị góc hợp lệ trên phiếu thi. Vui lòng chụp rõ toàn bộ 4 góc phiếu!"
   },
   {
     "submission_id": "sub_002_TranThiB_THPT",

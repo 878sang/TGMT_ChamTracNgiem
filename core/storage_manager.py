@@ -35,6 +35,7 @@ def ensure_data_dir():
 
 
 def get_all_exams() -> List[Exam]:
+    """Lấy tất cả bài kiểm tra. Trả về danh sách rỗng nếu có lỗi và ghi thông báo rõ ràng."""
     ensure_data_dir()
     try:
         with open(EXAMS_FILE, "r", encoding="utf-8") as f:
@@ -50,6 +51,9 @@ def get_all_exams() -> List[Exam]:
             print(f"Đã sao lưu file lỗi sang: {backup_path}")
         except Exception:
             pass
+        return []
+    except PermissionError:
+        print(f"[LỖI] Không có quyền đọc file: {EXAMS_FILE}")
         return []
     except Exception as e:
         print(f"Lỗi đọc danh sách bài kiểm tra: {e}")
