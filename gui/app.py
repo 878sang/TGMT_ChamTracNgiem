@@ -1474,11 +1474,6 @@ class OMRGradingApp(ctk.CTk):
             lbl_modal_score.configure(text=f"Tổng điểm: {sub.total_score:.2f} / 10.0")
             messagebox.showinfo("Thành công", f"Đã cập nhật bài làm! Điểm số mới: {sub.total_score:.2f}")
 
-            # Lưu vào storage
-            save_submissions(self.current_exam.exam_id, self.current_submissions)
-            self.render_submission_table()
-            lbl_modal_score.configure(text=f"Tổng điểm: {sub.total_score:.2f} / 10.0")
-            messagebox.showinfo("Thành công", f"Đã cập nhật bài làm! Điểm số mới: {sub.total_score:.2f}")
 
         btn_save_regrade = ctk.CTkButton(
             btn_action_box, text="💾 LƯU & CHẤM LẠI BÀI NÀY", height=40,
