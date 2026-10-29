@@ -1094,12 +1094,10 @@ class OMRGradingApp(ctk.CTk):
             else:
                 new_submissions.append(sub)
 
-        # Lưu vào storage
-        self.current_submissions = new_submissions
-        save_submissions(self.current_exam.exam_id, self.current_submissions)
-
-        # Chuyển toàn bộ cập nhật giao diện hoàn tất về luồng chính
+        # Chuyển toàn bộ cập nhật dữ liệu và giao diện về luồng chính (Thread-safe)
         def on_grading_complete():
+            self.current_submissions = new_submissions
+            save_submissions(self.current_exam.exam_id, self.current_submissions)
             self.lbl_progress.configure(text=f"Hoàn thành! Đã chấm xong {total} bài thi.")
             self.btn_start_grading.configure(state="normal")
             self.render_submission_table()
