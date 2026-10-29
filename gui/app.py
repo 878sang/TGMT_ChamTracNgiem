@@ -1248,8 +1248,9 @@ class OMRGradingApp(ctk.CTk):
             active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
             if not active_key and self.current_exam.answer_keys:
                 active_key = list(self.current_exam.answer_keys.values())[0]
+            _num_q_editor = getattr(self.current_exam, "num_questions", 40) or 40
 
-            for q_i in range(1, 41):
+            for q_i in range(1, _num_q_editor + 1):
                 ans_val = ans_dict.get(q_i) or ans_dict.get(str(q_i)) or ""
                 correct_k = active_key.get(q_i) or active_key.get(str(q_i)) or ""
 
@@ -1561,7 +1562,7 @@ class OMRGradingApp(ctk.CTk):
         make_kpi(0, "Tổng bài tiếp nhận", f"{len(self.current_submissions)} (Lỗi: {len(error_subs)})", "#2980B9")
         make_kpi(1, "Điểm TB (bài hợp lệ)", avg, "#27AE60")
         make_kpi(2, "Điểm cao nhất", max_s, "#8E44AD")
-        make_kpi(3, "Cần kiểm tra / Lỗi", f"{len(review_submissions)} / {len(error_subs)}", "#E67E22")
+        make_kpi(3, "Cần kiểm tra / Lỗi", f"{len(review_subs)} / {len(error_subs)}", "#E67E22")
 
         # Phân loại học sinh (chỉ tính trên bài thi hợp lệ)
         dist_frame = ctk.CTkFrame(container)
