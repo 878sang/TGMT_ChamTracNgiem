@@ -57,7 +57,8 @@ def process_single_submission(
     Xử lý chấm trọn gói một bài thi từ đường dẫn ảnh chụp.
     Kết hợp: Căn chỉnh ảnh -> Bóc tách OMR -> Nhận diện OCR -> Đối chiếu DS Excel -> Chấm điểm
     """
-    os.makedirs(ANNOTATED_DIR, exist_ok=True)
+    annotated_dir = _get_annotated_dir()
+    os.makedirs(annotated_dir, exist_ok=True)
     filename = os.path.basename(image_path)
     base_id = os.path.splitext(filename)[0]
 
