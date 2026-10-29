@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "▶ Chạy Ứng Dụng Chấm Bài",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "python": "C:\\Users\\namde\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "🧪 Chạy Tests (pytest)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\namde\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+            "args": ["tests/", "-v"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ]
+}
+
