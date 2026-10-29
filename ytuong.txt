@@ -1,0 +1,140 @@
+# ==============================================================================
+# ĐỀ TÀI: HỆ THỐNG QUÉT VÀ CHẤM BÀI TRẮC NGHIỆM ĐA NĂNG BẰNG PYTHON & COMPUTER VISION
+# TÍNH NĂNG ĐẶC BIỆT: HỖ TRỢ 2 CHẾ ĐỘ (FULL TRẮC NGHIỆM & CHUẨN THPT MỚI BGD&ĐT)
+# ==============================================================================
+
+---
+
+# 1. Ý tưởng tổng quan
+
+Hệ thống được thiết kế linh hoạt, phục vụ toàn diện nhu cầu kiểm tra và khảo thí của giáo viên với **2 CHẾ ĐỘ THI (EXAM MODES)** có thể tùy chọn khi tạo bài kiểm tra:
+
+```text
+                           HỆ THỐNG CHẤM THI ĐA NĂNG
+                                       │
+        ┌──────────────────────────────┴──────────────────────────────┐
+        ▼                                                             ▼
+[CHẾ ĐỘ 1: FULL TRẮC NGHIỆM]                    [CHẾ ĐỘ 2: ĐỀ CHUẨN THPT MỚI]
+(Kiểm tra 15p, 1 tiết, học kỳ)                  (Ôn thi tốt nghiệp THPT từ 2025)
+- Định dạng: 20, 40 hoặc 50 câu                - Cấu trúc 3 Phần chuẩn Bộ GD&ĐT:
+- Lựa chọn: A, B, C, D (chọn 1)                  + Phần I: 12 câu 4 lựa chọn (3.0đ)
+- Cách tính điểm:                                + Phần II: 4 câu Đúng/Sai (4.0đ)
+  Điểm = (Số câu đúng / Tổng) * 10                 (chấm lũy tiến: 0.1 - 0.25 - 0.5 - 1.0đ)
+- Thao tác: Nhập nhanh A B C D...                + Phần III: 6 câu Trả lời ngắn (3.0đ)
+                                                   (tô bảng số: '-', ',', 0-9)
+        │                                                             │
+        └──────────────────────────────┬──────────────────────────────┘
+                                       ▼
+                          THỊ GIÁC MÁY TÍNH (OPENCV)
+                     (Phát hiện Marker -> Căn chỉnh Warp ->
+                        Nhận diện SBD, Mã đề & Ô tô OMR)
+                                       ▼
+                       KẾT QUẢ, REVIEW & XUẤT EXCEL
+```
+
+Giáo viên có thể dùng phần mềm cho **mọi cấp học và mọi hình thức kiểm tra**:
+- Trong năm học: Dùng **Chế độ 1 (Full trắc nghiệm)** để chấm bài kiểm tra 15 phút, 1 tiết, giữa kỳ, cuối kỳ nhanh gọn.
+- Giai đoạn luyện thi: Dùng **Chế độ 2 (Chuẩn THPT)** để tổ chức thi thử tốt nghiệp THPT theo đúng cấu trúc đề và quy chế chấm điểm mới nhất của Bộ GD&ĐT.
+
+---
+
+# 2. Chi tiết 2 Chế độ thi của Hệ thống
+
+## 2.1. CHẾ ĐỘ 1: TRẮC NGHIỆM TRUYỀN THỐNG (FULL TRẮC NGHIỆM)
+- **Mục đích:** Kiểm tra thông thường trong lớp học.
+- **Số câu hỏi linh hoạt:** Hỗ trợ mẫu 20 câu, 40 câu hoặc 50 câu.
+- **Quy cách ô chọn:** Mỗi câu gồm 4 ô A, B, C, D (chọn 1 phương án đúng).
+- **Quy tắc chấm:**
+  $$\text{Điểm} = \frac{\text{Số câu đúng}}{\text{Tổng số câu}} \times \text{Thang điểm (10.0)}$$
+- **Nhập đáp án:**
+  - Nhập trực tiếp chuỗi nhanh (ví dụ: `B A C D B A C D...`).
+  - Import từ file Excel gồm 2 cột: `Câu` và `Đáp án`.
+
+## 2.2. CHẾ ĐỘ 2: ĐỀ THI CHUẨN TỐT NGHIỆP THPT (BỘ GD&ĐT MỚI TỪ 2025)
+- **Mục đích:** Thi thử tốt nghiệp THPT môn Toán, Lý, Hóa, Sinh,...
+- **Cấu trúc 3 Phần chuẩn quy chế:**
+  1. **Phần I - Trắc nghiệm 4 lựa chọn:** 12 câu (Toán). Mỗi câu đúng = 0.25 điểm (tối đa 3.0 điểm).
+  2. **Phần II - Trắc nghiệm Đúng / Sai:** 4 câu, mỗi câu có 4 ý a, b, c, d (tô Đ hoặc S).
+     - Quy chế tính điểm lũy tiến:
+       + Đúng 1 ý: **0,1 điểm**
+       + Đúng 2 ý: **0,25 điểm**
+       + Đúng 3 ý: **0,5 điểm**
+       + Đúng 4 ý: **1,0 điểm**
+       *(Tối đa 4 câu = 4.0 điểm).*
+  3. **Phần III - Trắc nghiệm Trả lời ngắn:** 6 câu. Thí sinh giải ra kết quả số và tô vào bảng cột số gồm dấu `[-]`, `[,]`, và các số `0` đến `9`.
+     - Mỗi câu đúng = **0,5 điểm** (tối đa 6 câu = 3.0 điểm).
+- **Tổng điểm:** $3.0 + 4.0 + 3.0 = \mathbf{10.0\text{ điểm}}$.
+- **Nhập đáp án:** Nhập theo 3 tab trên giao diện hoặc Import từ file Excel cấu trúc 3 phần.
+
+---
+
+# 3. Khu vực Nhận diện Thí sinh (SBD & Mã đề)
+
+Cả hai chế độ đều hỗ trợ:
+- **Số báo danh (SBD):** Nhận diện từ 4 đến 6 cột số tô tròn (hoặc lấy mã từ tên file ảnh).
+- **Mã đề thi:** Nhận diện 3 cột số (ví dụ: mã `101`, `102`, `103`, `104`).
+- **Khớp đáp án thông minh:** Hệ thống đọc mã đề trên bài làm để tự động lấy đúng bảng đáp án của mã đề đó để chấm.
+
+---
+
+# 4. Pipeline Thị giác máy tính (Computer Vision Pipeline)
+
+Quy trình xử lý ảnh được thiết kế thành các module có khả năng tái sử dụng cao:
+
+```text
+                      ẢNH PHIẾU BÀI LÀM
+                             ↓
+              TIỀN XỬ LÝ & CĂN CHỈNH (OPENCV)
+  (Grayscale -> Gaussian Blur -> Canny/Threshold -> Tìm 4 Marker -> Warp)
+                             ↓
+                 ẢNH PHẲNG CHUẨN KÍCH THƯỚC
+                             ↓
+             PHÂN LUỒNG THEO CHẾ ĐỘ ĐÃ CHỌN
+                             │
+        ┌────────────────────┴────────────────────┐
+        ▼                                         ▼
+   [CHẾ ĐỘ 1: FULL TN]                    [CHẾ ĐỘ 2: THPT 3 PHẦN]
+        │                                         │
+  Crop ROI các cột A-B-C-D               Crop 4 ROI:
+        │                                ├── ROI SBD & Mã đề
+  Quét mật độ pixel                      ├── ROI Phần I (12 câu x 4 ô)
+        │                                ├── ROI Phần II (4 câu x 4 ý Đ/S)
+  Bóc tách A/B/C/D                       └── ROI Phần III (6 câu bảng số)
+        │                                         │
+        │                                Quét OMR theo từng dạng ô
+        │                                         │
+        └────────────────────┬────────────────────┘
+                             ▼
+                     LOGIC CHẤM ĐIỂM
+  (So khớp Answer Key -> Tính điểm tương ứng theo Chế độ 1 hoặc Chế độ 2)
+                             ▼
+             HIỂN THỊ KẾT QUẢ, REVIEW & XUẤT EXCEL
+```
+
+---
+
+# 5. Các tính năng phần mềm hoàn chỉnh
+
+1. **Tạo & Cấu hình bài kiểm tra:**
+   - Chọn loại bài: **Full trắc nghiệm** hoặc **Chuẩn THPT 3 phần**.
+   - Thiết lập số câu, thang điểm, thông tin môn, lớp.
+   - Nhập đáp án cho 1 hoặc nhiều mã đề (Nhập tay, Nhập nhanh chuỗi hoặc Import Excel).
+   - Xuất file đáp án ra Excel/TXT.
+
+2. **Chấm bài tự động hàng loạt:**
+   - Chọn thư mục ảnh bài làm.
+   - Thanh tiến trình chấm theo thời gian thực (hiển thị ảnh đang chấm, SBD, mã đề, điểm số).
+   - Tự động phát hiện lỗi và bài nghi vấn:
+     + *Đã chấm (Xanh lá)*: Chấm thành công, độ tin cậy cao.
+     + *Cần kiểm tra (Vàng)*: Thí sinh tẩy lem nhem, tô mờ, hoặc tô trùng ô.
+     + *Lỗi (Đỏ)*: Ảnh chụp quá mờ, che mất góc định vị.
+
+3. **Màn hình Review bài thi (Verification Screen):**
+   - Xem ảnh bài làm đã được vẽ khoanh xanh (đúng), khoanh đỏ (sai) và đóng dấu điểm số.
+   - Cho phép giáo viên click sửa tay câu nghi vấn trực tiếp trên giao diện chỉ với 1 click.
+
+4. **Báo cáo & Thống kê Excel:**
+   - Xuất file Excel báo cáo gồm 3 Sheet:
+     + *Sheet 1:* Bảng điểm tổng hợp (SBD, Họ tên, Mã đề, Điểm chi tiết từng phần, Tổng điểm, Xếp loại).
+     + *Sheet 2:* Bảng ma trận chi tiết đáp án từng câu của từng học sinh.
+     + *Sheet 3:* Thống kê phân bố điểm, tỷ lệ đúng/sai theo từng câu hỏi.

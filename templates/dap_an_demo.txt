@@ -1,0 +1,19 @@
+# ĐÁP ÁN BÀI KIỂM TRA
+# DẠNG CHUỖI NHANH: A B C D B A C D A B C D A B C D
+
+Câu 1: A
+Câu 2: B
+Câu 3: C
+Câu 4: D
+Câu 5: B
+Câu 6: A
+Câu 7: C
+Câu 8: D
+Câu 9: A
+Câu 10: B
+Câu 11: C
+Câu 12: D
+Câu 13: A
+Câu 14: B
+Câu 15: C
+Câu 16: D

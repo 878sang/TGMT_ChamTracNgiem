@@ -1,0 +1,74 @@
+[
+  {
+    "submission_id": "sub_002_TranThiB_THPT",
+    "exam_id": "exam_demo_thpt_2025",
+    "student_id": "000002",
+    "student_name": "TranThiB",
+    "exam_code": "101",
+    "image_path": "dataset/sample_submissions/002_TranThiB_THPT.png",
+    "annotated_image_path": "d:/Thị giác máy tính/Đồ Án/data/annotated\\result_002_TranThiB_THPT.png",
+    "extracted_data": {
+      "part1": {
+        "1": "C",
+        "2": "B",
+        "3": "D",
+        "4": "A",
+        "5": "C",
+        "6": "B",
+        "7": "D",
+        "8": "A",
+        "9": "C",
+        "10": "B",
+        "11": "D",
+        "12": "A"
+      },
+      "part2": {
+        "1": {
+          "a": "Đ",
+          "b": "S",
+          "c": "Đ",
+          "d": "Đ"
+        },
+        "2": {
+          "a": "S",
+          "b": "Đ",
+          "c": "S",
+          "d": "Đ"
+        },
+        "3": {
+          "a": "Đ",
+          "b": "Đ",
+          "c": "S",
+          "d": "S"
+        },
+        "4": {
+          "a": "S",
+          "b": "S",
+          "c": "Đ",
+          "d": "Đ"
+        }
+      },
+      "part3": {
+        "1": "15",
+        "2": "-2.5",
+        "3": "0.750",
+        "4": "12",
+        "5": "-8",
+        "6": "3.14"
+      },
+      "sbd": "000002",
+      "exam_code": "101",
+      "needs_review": true
+    },
+    "score_part1": 0.75,
+    "score_part2": 4.0,
+    "score_part3": 2.5,
+    "total_score": 7.25,
+    "correct_count": 8,
+    "wrong_count": 0,
+    "blank_count": 0,
+    "status": "Cần kiểm tra",
+    "needs_review": true,
+    "error_message": ""
+  }
+]

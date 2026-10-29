@@ -1,0 +1,227 @@
+# ==============================================================================
+# ĐỒ ÁN MÔN HỌC: THỊ GIÁC MÁY TÍNH
+# ĐỀ TÀI: HỆ THỐNG QUÉT VÀ CHẤM BÀI TRẮC NGHIỆM ĐA NĂNG BẰNG PYTHON & OPENCV
+# TÀI LIỆU: BẢN PHÂN CHIA NHIỆM VỤ 4 THÀNH VIÊN
+# TÍNH NĂNG ĐẶC BIỆT: HỖ TRỢ 2 CHẾ ĐỘ THI (FULL TRẮC NGHIỆM & CHUẨN THPT MỚI BGD&ĐT)
+# ==============================================================================
+
+I. TỔNG QUAN KIẾN TRÚC HỆ THỐNG ĐA NĂNG
+--------------------------------------------------------------------------------
+Hệ thống cho phép giáo viên lựa chọn 1 trong 2 chế độ thi khi tạo bài kiểm tra:
+
+  [CHẾ ĐỘ 1: FULL TRẮC NGHIỆM]                   [CHẾ ĐỘ 2: CHUẨN THPT MỚI]
+  - Kiểm tra 15p, 1 tiết, học kỳ                 - Luyện thi tốt nghiệp THPT từ 2025
+  - 20, 40 hoặc 50 câu A-B-C-D                   - Cấu trúc 3 Phần chuẩn Bộ GD&ĐT:
+  - Tính điểm đều (Điểm = Đúng/Tổng * 10)          + Phần I: 12 câu 4 lựa chọn (3.0đ)
+                                                   + Phần II: 4 câu Đúng/Sai (4.0đ)
+                                                   + Phần III: 6 câu Trả lời ngắn (3.0đ)
+
+Kiến trúc phần mềm được thiết kế theo hướng MODULE HÓA TÁI SỬ DỤNG CAO:
+- Thuật toán căn chỉnh ảnh (TV1) dùng chung cho cả 2 loại phiếu (nhờ 4 Marker định vị ở 4 góc).
+- Thuật toán nhận diện ô tròn A-B-C-D (TV2) dùng chung cho Chế độ 1 và Phần I của Chế độ 2.
+- Thuật toán nhận diện bảng số (TV2) dùng chung cho SBD/Mã đề và Phần III.
+- Logic chấm điểm (TV3) và Giao diện (TV4) tự động chuyển đổi theo chế độ bài thi được chọn.
+
+--------------------------------------------------------------------------------
+II. CHI TIẾT CÔNG VIỆC CỦA 4 THÀNH VIÊN
+--------------------------------------------------------------------------------
+
+================================================================================
+THÀNH VIÊN 1: THIẾT KẾ PHIẾU, DATASET & CĂN CHỈNH HÌNH HỌC (CV 1)
+================================================================================
+* Vai trò chính:
+  Chịu trách nhiệm về thiết kế 2 mẫu phiếu thi chuẩn, thu thập bộ dữ liệu ảnh thực 
+  tế và lập trình thuật toán nắn phẳng phối cảnh (Perspective Transform) dùng chung.
+
+* Công việc cụ thể:
+  1. Thiết kế 2 mẫu phiếu trắc nghiệm chuẩn (PDF khổ A4):
+     - Mẫu 1 (Full Trắc nghiệm): Gồm SBD/Mã đề + 40 câu trắc nghiệm 4 lựa chọn A-B-C-D.
+     - Mẫu 2 (Chuẩn THPT mới): Gồm SBD/Mã đề + Phần I (12 câu A-B-C-D) + 
+       Phần II (4 câu Đúng/Sai) + Phần III (6 câu bảng tô số).
+     - BẮT BUỘC Ở CẢ 2 MẪU: Đều đặt 4 ô vuông đen to (Fiducial Markers) ở 4 góc 
+       tờ giấy với cùng kích thước và tỷ lệ để dùng chung 1 thuật toán căn chỉnh góc.
+  2. Thu thập bộ dữ liệu thử nghiệm (Dataset):
+     - In cả 2 mẫu phiếu ra giấy thật, tô thử 20-30 bài mỗi loại.
+     - Chụp ảnh bằng điện thoại ở nhiều điều kiện: Chụp thẳng, chụp nghiêng 15-30 độ, 
+       chụp dưới bóng đổ, nền bàn gỗ, nền tập vở,...
+  3. Xây dựng module Căn chỉnh & Tách vùng quan tâm (`image_alignment.py`):
+     - Đọc ảnh -> Tiền xử lý (Grayscale, Gaussian Blur, Canny Edge / Adaptive Threshold).
+     - Thuật toán tìm 4 Marker định vị ở 4 góc bằng `cv2.findContours`.
+     - Perspective Transform (`cv2.warpPerspective`) đưa ảnh chụp nghiêng về ảnh phẳng 
+       kích thước chuẩn (1200 x 1700 px).
+     - Hàm cắt ROI thông minh theo chế độ:
+       + Nếu `mode == "full_mcq"`: Cắt ROI SBD/Mã đề và ROI 40 câu A-B-C-D.
+       + Nếu `mode == "thpt_2025"`: Cắt ROI SBD/Mã đề, ROI Phần I, ROI Phần II, ROI Phần III.
+     - Xử lý ngoại lệ: Trả về lỗi nếu ảnh bị che khuất góc hoặc quá mờ.
+
+* Sản phẩm bàn giao:
+  - 2 File thiết kế: `phieu_full_40_cau.pdf` và `phieu_thpt_2025.pdf`.
+  - Bộ dữ liệu ảnh thử nghiệm `dataset/`.
+  - File `image_alignment.py` chứa hàm:
+      align_and_crop(image_input, mode="full_mcq") -> (is_success, aligned_img, dict_rois, error_msg)
+
+================================================================================
+THÀNH VIÊN 2: BÓC TÁCH OMR CÁC DẠNG CÂU HỎI & VẼ KẾT QUẢ (CV 2)
+================================================================================
+* Vai trò chính:
+  Xây dựng các hàm lõi nhận diện OMR cho từng loại ô tô (A-B-C-D, Đúng/Sai, Bảng số) 
+  và vẽ khoanh tròn kết quả trực quan lên ảnh bài làm.
+
+* Công việc cụ thể:
+  1. Module nhận diện SBD và Mã đề (`omr_header.py`):
+     - Quét cột số từ 0 đến 9 của SBD (6 cột) và Mã đề (3 cột).
+     - Trả về chuỗi: `sbd = "012345"`, `exam_code = "101"`.
+  2. Module nhận diện Trắc nghiệm 4 lựa chọn (`omr_mcq.py`):
+     - Nhận ROI câu hỏi dạng A-B-C-D (dùng cho Chế độ 1 và Phần I của Chế độ 2).
+     - Sử dụng thuật toán so sánh tương đối giữa 4 ô: ô nào có mật độ pixel đen 
+       vượt trội sẽ được chọn.
+     - Xử lý các ca đặc biệt: Bỏ trống (`None`), tô 2 ô (`['A', 'B']`), tô mờ.
+     - Đánh giá độ tin cậy `confidence_score`.
+  3. Module nhận diện Trắc nghiệm Đúng / Sai (`omr_true_false.py`):
+     - Nhận ROI Phần II (4 câu x 4 ý a,b,c,d x 2 cột Đ/S).
+     - So sánh giữa 2 ô Đ và S của từng ý để lấy đáp án học sinh chọn.
+  4. Module nhận diện Bảng tô số (`omr_number_grid.py`):
+     - Nhận ROI Phần III (6 câu, mỗi câu có 4 cột số gồm dấu '-', ',', và các số 0-9).
+     - Quét từng cột để ghép thành giá trị số thực (ví dụ: `"-2.5"`, `"15"`).
+  5. Module Vẽ trực quan kết quả (`visualizer.py`):
+     - Vẽ trực tiếp lên ảnh bài làm:
+       + Ý/câu đúng: Khoanh tròn viền XANH LÁ.
+       + Ý/câu sai: Khoanh tròn viền ĐỎ.
+       + Đáp án đúng bị bỏ lỡ: Khoanh tròn viền VÀNG.
+     - Đóng dấu tổng điểm và điểm thành phần ở góc trên phiếu.
+
+* Sản phẩm bàn giao:
+  - File `omr_extractor.py` tổng hợp:
+      extract_answers(dict_rois, mode="full_mcq") -> dict kết quả chi tiết.
+  - File `visualizer.py`: Vẽ kết quả và điểm số lên ảnh phiếu làm bài.
+
+================================================================================
+THÀNH VIÊN 3: LOGIC CHẤM ĐIỂM, XỬ LÝ EXCEL & DỮ LIỆU (BACKEND & DATA)
+================================================================================
+* Vai trò chính:
+  Cài đặt logic chấm điểm cho cả 2 chế độ thi, quản lý dữ liệu bài thi và xây dựng 
+  module Import/Export Excel tương thích 2 chế độ.
+
+* Công việc cụ thể:
+  1. Xây dựng Engine Chấm điểm đa năng (`grading_engine.py`):
+     - Tự động lấy bộ đáp án đúng theo Mã đề thi đã nhận diện.
+     - **Nếu bài thi là Chế độ 1 (Full Trắc nghiệm):**
+       + So khớp đáp án từng câu A-B-C-D.
+       + Điểm = (Số câu đúng / Tổng số câu) * Thang điểm (thường là 10.0).
+     - **Nếu bài thi là Chế độ 2 (Chuẩn THPT mới):**
+       + Phần I: Đúng mỗi câu = 0.25 điểm (tối đa 3.0 điểm).
+       + Phần II: Chấm lũy tiến từng câu (Đúng 1 ý = 0.1đ | 2 ý = 0.25đ | 3 ý = 0.5đ | 4 ý = 1.0đ).
+       + Phần III: So khớp chuỗi số, mỗi câu đúng = 0.5 điểm (tối đa 3.0 điểm).
+       + Tổng điểm = Điểm P1 + Điểm P2 + Điểm P3 (tối đa 10.0).
+  2. Quản lý Dữ liệu (`storage_manager.py`):
+     - Lưu cấu trúc bài thi, danh sách học sinh và kết quả chấm ra JSON/SQLite.
+  3. Module Excel đa năng (`excel_handler.py`):
+     - **Import đáp án:** Hỗ trợ đọc cả 2 loại file Excel:
+       + Mẫu Full trắc nghiệm (cột Câu, Đáp án).
+       + Mẫu THPT mới (gồm 3 phần: Phần I, II, III).
+     - **Xuất đáp án:** Cho phép xuất file đáp án ra Excel từ hệ thống.
+     - **Xuất báo cáo kết quả (3 Sheet):**
+       + Sheet 1: Bảng điểm tổng hợp (SBD, Họ tên, Mã đề, Điểm thành phần, Tổng điểm, Xếp loại).
+       + Sheet 2: Bảng chi tiết từng câu của từng học sinh.
+       + Sheet 3: Thống kê phổ điểm và tỷ lệ đúng/sai theo từng câu.
+  4. Tạo các file Excel mẫu chuẩn:
+     - `mau_dap_an_full_mcq.xlsx` (Mẫu Full trắc nghiệm).
+     - `mau_dap_an_thpt_2025.xlsx` (Mẫu THPT mới 3 phần).
+     - `mau_danh_sach_lop.xlsx` (Mẫu danh sách học sinh).
+
+* Sản phẩm bàn giao:
+  - File `grading_engine.py` (Chấm điểm cả 2 chế độ).
+  - File `excel_handler.py` (Đọc/ghi Excel cả 2 chế độ).
+  - File `storage_manager.py` (Lưu trữ dữ liệu).
+  - Bộ 3 file Excel mẫu đính kèm trong thư mục `templates/`.
+
+================================================================================
+THÀNH VIÊN 4: GIAO DIỆN NGƯỜI DÙNG & TÍCH HỢP HỆ THỐNG (FRONTEND & INTEGRATION)
+================================================================================
+* Vai trò chính:
+  Thiết kế giao diện Desktop GUI hiện đại (CustomTkinter/PyQt6) hỗ trợ chuyển đổi 
+  mượt mà giữa 2 chế độ thi, kết nối toàn bộ hệ thống vào file `main.py`.
+
+* Công việc cụ thể:
+  1. Thiết kế Giao diện Desktop Đa năng:
+     - **Màn hình 1 - Quản lý bài kiểm tra:** Danh sách bài thi, nút Tạo mới, Sửa, Xóa.
+     - **Màn hình 2 - Thiết lập bài thi (Quan trọng):**
+       + Cho phép giáo viên chọn chế độ:
+           (●) Chế độ 1: Full trắc nghiệm (20/40/50 câu)
+           (○) Chế độ 2: Đề chuẩn Tốt nghiệp THPT (3 phần BGD&ĐT)
+       + Form nhập đáp án tự động thay đổi theo chế độ:
+         * Chế độ 1: Ô nhập nhanh A B C D... hoặc bảng chọn 4 phương án.
+         * Chế độ 2: Chia 3 tab (Tab Phần I, Tab Phần II Đúng/Sai, Tab Phần III Nhập số).
+       + Nút Import Excel và Xuất Excel đáp án.
+     - **Màn hình 3 - Quét bài & Chấm hàng loạt:**
+       + Chọn thư mục ảnh bài thi của lớp.
+       + Thanh ProgressBar chạy mượt mà khi chấm.
+       + Bảng danh sách kết quả (tự động hiển thị các cột điểm tương ứng theo chế độ thi).
+     - **Màn hình 4 - Review & Sửa lỗi (Verification Screen):**
+       + Bấm vào học sinh để xem ảnh phiếu thi đã vẽ khoanh xanh/đỏ.
+       + Nếu có câu bị cờ "Cần kiểm tra" (học sinh tẩy lem), hiển thị ô phóng to và 
+         cho phép giáo viên click sửa nhanh điểm số.
+     - **Màn hình 5 - Thống kê & Xuất Excel báo cáo 1-click.**
+  2. Tích hợp hệ thống (`main.py`):
+     - Gọi module TV1 -> TV2 -> TV3 mượt mà dựa trên tham số `exam_mode`.
+     - Áp dụng Threading để giao diện không bị giật lag khi đang quét hàng loạt ảnh nặng.
+     - Bắt toàn bộ lỗi (Try/Catch) tránh crash chương trình khi gặp ảnh hỏng.
+  3. Đóng gói & Chuẩn bị Demo:
+     - Tạo file `requirements.txt` và `README.md`.
+     - Chuẩn bị sẵn 2 kịch bản demo: 1 bài kiểm tra Full trắc nghiệm và 1 bài thi chuẩn THPT 2025.
+
+* Sản phẩm bàn giao:
+  - Ứng dụng Desktop hoàn chỉnh chạy từ `python main.py`.
+  - Toàn bộ source code giao diện trong thư mục `gui/`.
+
+--------------------------------------------------------------------------------
+III. CHUẨN GIAO TIẾP DỮ LIỆU ĐA CHẾ ĐỘ (INTERFACE CONTRACT)
+--------------------------------------------------------------------------------
+
+1. Giữa TV1 và TV2:
+   - TV1 trả về dict các ảnh ROI dựa trên `mode`:
+     + Nếu `mode == "full_mcq"`:
+       {"header": roi_header, "mcq_body": roi_mcq}
+     + Nếu `mode == "thpt_2025"`:
+       {"header": roi_header, "part1": roi_p1, "part2": roi_p2, "part3": roi_p3}
+
+2. Giữa TV2 và TV3:
+   - TV2 trả về dict kết quả:
+     + Chế độ 1:
+       {"sbd": "001", "exam_code": "101", "answers": {1: "A", 2: "B", ...}, "needs_review": False}
+     + Chế độ 2:
+       {"sbd": "001", "exam_code": "101", "part1": {...}, "part2": {...}, "part3": {...}, "needs_review": False}
+
+3. Giữa TV3 và TV4:
+   - TV3 trả về kết quả chấm:
+     + Chế độ 1:
+       {"sbd": "001", "student_name": "Nguyen Van A", "correct": 35, "total": 40, "score": 8.75, "status": "Đã chấm"}
+     + Chế độ 2:
+       {"sbd": "001", "student_name": "Nguyen Van A", "p1_score": 2.75, "p2_score": 3.25, "p3_score": 2.5, "total_score": 8.5, "status": "Đã chấm"}
+
+--------------------------------------------------------------------------------
+IV. LỘ TRÌNH THỰC HIỆN ĐỀ XUẤT (4 TUẦN)
+--------------------------------------------------------------------------------
+
+* TUẦN 1: Chuẩn hóa 2 Mẫu phiếu & Dữ liệu ban đầu
+  - TV1 vẽ 2 mẫu phiếu PDF (`phieu_full_40_cau.pdf` & `phieu_thpt_2025.pdf`) có cùng 4 Marker góc.
+  - TV1 in ra giấy và chụp bộ dataset ảnh mẫu cho cả 2 loại phiếu.
+  - TV3 tạo 2 file Excel mẫu đáp án (`mau_dap_an_full_mcq.xlsx` & `mau_dap_an_thpt_2025.xlsx`).
+  - TV4 dựng khung giao diện có nút chuyển đổi giữa 2 chế độ thi.
+
+* TUẦN 2: Xây dựng Core Algorithms cho cả 2 chế độ
+  - TV1 hoàn thiện module tìm 4 marker và Perspective Transform dùng chung (`image_alignment.py`).
+  - TV2 hoàn thiện nhận diện SBD/Mã đề và thuật toán nhận diện ô A-B-C-D (`omr_mcq.py`).
+  - TV3 hoàn thành logic chấm điểm cho Chế độ 1 và Chế độ 2 (`grading_engine.py`).
+  - TV4 hoàn thành giao diện nhập đáp án theo 2 chế độ.
+
+* TUẦN 3: Mở rộng Phần Đúng/Sai & Bảng số + Tích hợp hệ thống
+  - TV2 hoàn thành nhận diện Phần II (Đúng/Sai) và Phần III (Bảng số).
+  - TV3 hoàn thành module xuất báo cáo Excel cho cả 2 chế độ.
+  - TV4 ghép nối pipeline của TV1, TV2, TV3 vào `main.py` và hoàn thiện màn hình Review.
+  - Cả nhóm chạy thử nghiệm chấm hàng loạt trên cả 2 bộ đề.
+
+* TUẦN 4: Kiểm thử, Tối ưu hóa & Làm báo cáo
+  - Cả nhóm test toàn diện cả 2 chế độ với nhiều điều kiện ảnh chụp khác nhau.
+  - Tinh chỉnh các ca lỗi nhận diện do học sinh tô mờ hoặc tẩy nhem.
+  - Hoàn thiện báo cáo đồ án, slide thuyết trình và quay video demo.
