@@ -437,17 +437,42 @@ def simulate_camera_photo(perfect_img: np.ndarray, angle: float = 3.5, shadow: b
     # Hợp nhất giấy vào nền
     bg[warped_mask > 0] = warped_paper[warped_mask > 0]
 
-    # Thêm bóng đổ nhẹ góc trái
+    # Thêm bóng đổ thực tế góc trái (giảm sáng nhẹ 20-25% với viền mờ)
     if shadow:
-        cv2.ellipse(bg, (bg_w // 4, bg_h // 3), (350, 450), 30, 0, 360, (0, 0, 0), -1)
-        bg = cv2.addWeighted(bg, 0.88, bg, 0.12, 0)
+        shadow_mask = np.zeros((bg_h, bg_w), dtype=np.uint8)
+        cv2.ellipse(shadow_mask, (bg_w // 4, bg_h // 3), (350, 450), 30, 0, 360, 255, -1)
+        shadow_mask = cv2.GaussianBlur(shadow_mask, (101, 101), 0)
+        factor = 1.0 - (shadow_mask.astype(np.float32) / 255.0) * 0.25
+        bg = np.clip(bg.astype(np.float32) * factor[:, :, np.newaxis], 0, 255).astype(np.uint8)
 
     return bg
 
 
+def simulate_low_light(img: np.ndarray, factor: float = 0.55) -> np.ndarray:
+    """Giả lập ảnh chụp trong điều kiện thiếu sáng (phòng tối, ánh đèn yếu)"""
+    return np.clip(img.astype(np.float32) * factor, 0, 255).astype(np.uint8)
+
+
+def simulate_blur(img: np.ndarray, ksize: int = 5) -> np.ndarray:
+    """Giả lập ảnh chụp bị rung tay hoặc lấy nét mờ (out-of-focus)"""
+    return cv2.GaussianBlur(img, (ksize, ksize), 0)
+
+
+def simulate_heavy_shadow(img: np.ndarray) -> np.ndarray:
+    """Giả lập bóng đổ gắt của điện thoại hoặc cánh tay thí sinh đè lên bài thi"""
+    h, w = img.shape[:2]
+    shadow_mask = np.zeros((h, w), dtype=np.uint8)
+    # Vẽ đa giác bóng đổ chéo góc
+    pts = np.array([[0, int(h * 0.2)], [int(w * 0.7), 0], [int(w * 0.4), h], [0, h]], dtype=np.int32)
+    cv2.fillPoly(shadow_mask, [pts], 255)
+    shadow_mask = cv2.GaussianBlur(shadow_mask, (151, 151), 0)
+    factor = 1.0 - (shadow_mask.astype(np.float32) / 255.0) * 0.45
+    return np.clip(img.astype(np.float32) * factor[:, :, np.newaxis], 0, 255).astype(np.uint8)
+
+
 if __name__ == "__main__":
-    templates_dir = "d:/Thị giác máy tính/Đồ Án/templates"
-    sample_dir = "d:/Thị giác máy tính/Đồ Án/dataset/sample_submissions"
+    templates_dir = os.path.join(PROJECT_ROOT, "templates")
+    sample_dir = os.path.join(PROJECT_ROOT, "dataset", "sample_submissions")
     os.makedirs(templates_dir, exist_ok=True)
     os.makedirs(sample_dir, exist_ok=True)
 
@@ -554,4 +579,61 @@ if __name__ == "__main__":
     # Giữ lại tên cũ để tương thích với các lệnh test cũ
     imwrite_utf8(os.path.join(sample_dir, "photo_test_thpt.jpg"), photo_thpt_1)
 
-    print("Da sinh day du bo anh test mau cho ca 2 che do va anh chup dien thoai!")
+    # =============================================================
+    # 4. BỘ ẢNH KIỂM THỬ ĐA DẠNG: THIẾU SÁNG, BÓNG ĐỔ, MỜ, LỖI TÔ THỰC TẾ
+    # =============================================================
+    # a. Ảnh chụp thiếu sáng (underexposed)
+    photo_low_light = simulate_low_light(photo_full_1, factor=0.52)
+    imwrite_utf8(os.path.join(sample_dir, "photo_test_low_light.jpg"), photo_low_light)
+
+    # b. Ảnh chụp mờ (Gaussian blur do rung tay)
+    photo_blurred = simulate_blur(photo_thpt_1, ksize=5)
+    imwrite_utf8(os.path.join(sample_dir, "photo_test_blurred.jpg"), photo_blurred)
+
+    # c. Ảnh chụp có bóng đổ gắt (bóng điện thoại / cánh tay)
+    photo_shadow = simulate_heavy_shadow(photo_full_1)
+    imwrite_utf8(os.path.join(sample_dir, "photo_test_shadow.jpg"), photo_shadow)
+
+    # d. Bài thi có lỗi tẩy lem / tô 2 ô cùng 1 câu
+    s_flawed_lem = generate_full_mcq_template(student_name="Nguyen Van Lem", sbd="000004", exam_code="101")
+    # Tô SBD & mã đề
+    for col, digit in enumerate("000004"):
+        fill_bubble(s_flawed_lem, 160 + col * 65, 200 + int(digit) * 25, radius=8)
+    for col, digit in enumerate("101"):
+        fill_bubble(s_flawed_lem, 680 + col * 65, 200 + int(digit) * 25, radius=8)
+    # Tô bình thường các câu khác
+    for q in range(1, 41):
+        bx = 120 if q <= 20 else 640
+        q_row = (q - 1) if q <= 20 else (q - 21)
+        by = 600 + q_row * 48
+        if q == 5:
+            # Câu 5: tô cả A và B (tô trùng)
+            fill_bubble(s_flawed_lem, bx + 125 + 0 * 75, by, radius=12, intensity=35)
+            fill_bubble(s_flawed_lem, bx + 125 + 1 * 75, by, radius=12, intensity=35)
+        elif q == 10:
+            # Câu 10: tô C mờ (tẩy chì chưa sạch A, tô C)
+            fill_bubble(s_flawed_lem, bx + 125 + 0 * 75, by, radius=11, intensity=160)
+            fill_bubble(s_flawed_lem, bx + 125 + 2 * 75, by, radius=12, intensity=40)
+        else:
+            fill_bubble(s_flawed_lem, bx + 125 + ((q * 2) % 4) * 75, by, radius=12)
+    imwrite_utf8(os.path.join(sample_dir, "test_flawed_tay_lem.png"), s_flawed_lem)
+
+    # e. Bài thi tô mã đề không tồn tại (Mã đề: 999)
+    s_flawed_code = generate_sample_submission_full_mcq(sbd="000005", exam_code="999", student_name="Tran Ma De Sai")
+    imwrite_utf8(os.path.join(sample_dir, "test_flawed_ma_de_sai.png"), s_flawed_code)
+
+    # f. Bài thi Phần III có cột bị bỏ trống ở giữa (ví dụ: '1 _ 5')
+    s_thpt_gap = generate_thpt_2025_template(student_name="Le Van Gap", sbd="000014", exam_code="101")
+    for col, digit in enumerate("000014"):
+        fill_bubble(s_thpt_gap, 160 + col * 65, 200 + int(digit) * 25, radius=8)
+    for col, digit in enumerate("101"):
+        fill_bubble(s_thpt_gap, 680 + col * 65, 200 + int(digit) * 25, radius=8)
+    # Phần III câu 1: Tô cột 0 = '1', bỏ trống cột 1, tô cột 2 = '5'
+    bx_p3 = 120
+    by_p3 = 1260
+    fill_bubble(s_thpt_gap, bx_p3 + 95 + 0 * 48, by_p3 + 32 + 1 * 12, radius=5)  # Cột 0: số 1
+    # Cột 1: bỏ trống!
+    fill_bubble(s_thpt_gap, bx_p3 + 95 + 2 * 48, by_p3 + 32 + 5 * 12, radius=5)  # Cột 2: số 5
+    imwrite_utf8(os.path.join(sample_dir, "test_flawed_short_answer_gap.png"), s_thpt_gap)
+
+    print("Da sinh day du bo anh test da dang: goc nghieng, thieu sang, bong do, mo, tay lem, ma de sai, gap phan III!")

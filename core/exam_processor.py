@@ -23,7 +23,18 @@ from core.ocr_engine import extract_header_info_ocr
 from core.student_roster_handler import lookup_student_in_roster
 
 
-ANNOTATED_DIR = "d:/Thị giác máy tính/Đồ Án/data/annotated"
+ANNOTATED_DIR = os.path.join(PROJECT_ROOT, "data", "annotated")
+
+
+def set_annotated_dir(custom_path: str):
+    """Cho phép tùy biến thư mục lưu ảnh chấm điểm"""
+    global ANNOTATED_DIR
+    ANNOTATED_DIR = os.path.abspath(custom_path)
+    os.makedirs(ANNOTATED_DIR, exist_ok=True)
+
+
+def get_annotated_dir() -> str:
+    return ANNOTATED_DIR
 
 
 def process_single_submission(
@@ -57,20 +68,28 @@ def process_single_submission(
 
     # 2. Bóc tách OMR & Nhận diện OCR
     try:
-        extracted = extract_all_data(aligned, mode=exam.mode)
+        num_q = getattr(exam, 'num_questions', 40)
+        extracted = extract_all_data(aligned, mode=exam.mode, num_questions=num_q)
         submission.extracted_data = extracted
         
         # Nhận diện OCR trực tiếp từ khung tiêu đề phiếu thi (Họ tên, SBD)
         ocr_info = extract_header_info_ocr(aligned)
         submission.ocr_data = ocr_info
 
-        detected_sbd = extracted.get("sbd", "000")
-        detected_code = extracted.get("exam_code", "101")
+        detected_sbd = extracted.get("sbd", "???")
+        detected_code = extracted.get("exam_code", "???")
 
         if not submission.student_id:
             submission.student_id = detected_sbd
         submission.exam_code = detected_code
         submission.needs_review = extracted.get("needs_review", False)
+
+        # Cảnh báo header (SBD / Mã đề)
+        warnings = []
+        if not extracted.get("is_valid_sbd", True) or "?" in detected_sbd:
+            warnings.append(f"SBD '{detected_sbd}' chưa tô rõ hoặc nghi vấn")
+        if not extracted.get("is_valid_code", True) or "?" in detected_code:
+            warnings.append(f"Mã đề '{detected_code}' chưa tô rõ hoặc nghi vấn")
 
         # 3. Xác định Họ và tên thí sinh đa tầng (Multi-tier resolution):
         # Tầng 1 (Ưu tiên hàng đầu): Khớp nối SBD với Danh sách học sinh Excel của kỳ thi
@@ -88,19 +107,35 @@ def process_single_submission(
         elif not submission.student_name:
             submission.student_name = f"Thí sinh SBD {detected_sbd}"
 
-        # 3. Lấy Key đáp án tương ứng với Mã đề
-        # Nếu không có mã đề khớp, lấy key đầu tiên có trong bài kiểm tra
-        available_keys = exam.answer_keys
+        # 4. Lấy Key đáp án tương ứng với Mã đề
+        # TUYỆT ĐỐI KHÔNG tự lấy đáp án mã đầu tiên nếu mã đề không khớp!
+        available_keys = exam.answer_keys or {}
         active_key = available_keys.get(detected_code)
-        if not active_key and available_keys:
-            active_key = list(available_keys.values())[0]
 
         if not active_key:
-            submission.status = "Lỗi"
-            submission.error_message = f"Chưa có đáp án cho mã đề {detected_code}!"
+            submission.needs_review = True
+            submission.total_score = 0.0
+            if "?" in detected_code or not extracted.get("is_valid_code", True):
+                submission.status = "Cần kiểm tra"
+                submission.error_message = f"Mã đề '{detected_code}' không đọc được rõ ràng. Vui lòng xác nhận lại mã đề!"
+            else:
+                submission.status = "Cần kiểm tra"
+                submission.error_message = f"Mã đề '{detected_code}' không tồn tại trong bộ đáp án của kỳ thi!"
+
+            # Vẽ ảnh cảnh báo để giáo viên dễ đối chiếu khi xem lại bài
+            annotated_canvas = aligned.copy()
+            cv2.rectangle(annotated_canvas, (80, 15), (1120, 75), (0, 0, 200), -1)
+            cv2.putText(
+                annotated_canvas, 
+                f"CAN KIEM TRA: MA DE '{detected_code}' KHONG HOP LE", 
+                (100, 55), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 2
+            )
+            annotated_path = os.path.join(ANNOTATED_DIR, f"result_{filename}")
+            imwrite_utf8(annotated_path, annotated_canvas)
+            submission.annotated_image_path = annotated_path
             return submission
 
-        # 4. Chấm điểm theo chế độ
+        # 5. Chấm điểm theo chế độ khi đã có key chuẩn xác
         if exam.mode == ExamMode.FULL_MCQ:
             grade_result = grade_full_mcq(
                 student_answers=extracted.get("answers", {}),
@@ -122,7 +157,7 @@ def process_single_submission(
             submission.total_score = grade_result["total_score"]
             submission.correct_count = grade_result["p1_correct"] + grade_result["p3_correct"]
 
-        # 5. Vẽ trực quan kết quả chấm lên ảnh
+        # 6. Vẽ trực quan kết quả chấm lên ảnh
         annotated_img = draw_grading_overlay(
             aligned_img=aligned,
             mode=exam.mode,
@@ -135,7 +170,11 @@ def process_single_submission(
         imwrite_utf8(annotated_path, annotated_img)
         submission.annotated_image_path = annotated_path
 
-        # 6. Gán trạng thái
+        # 7. Gán trạng thái và thông điệp cảnh báo
+        if warnings:
+            submission.needs_review = True
+            submission.error_message = "; ".join(warnings)
+
         if submission.needs_review:
             submission.status = "Cần kiểm tra"
         else:

@@ -291,11 +291,20 @@ class OMRGradingApp(ctk.CTk):
         ctk.CTkLabel(mode_frame, text="Chọn Chế độ thi:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=8)
 
         self.mode_var = ctk.StringVar(value=ExamMode.FULL_MCQ)
+        
+        mode_full_row = ctk.CTkFrame(mode_frame, fg_color="transparent")
+        mode_full_row.pack(fill="x", padx=25, pady=5)
+
         self.rb_full = ctk.CTkRadioButton(
-            mode_frame, text="Chế độ 1: Trắc nghiệm 4 lựa chọn (Full 40 câu A-B-C-D)", 
+            mode_full_row, text="Chế độ 1: Trắc nghiệm 4 lựa chọn (Phiếu chuẩn A-B-C-D)", 
             variable=self.mode_var, value=ExamMode.FULL_MCQ, command=self.update_answer_key_input_ui
         )
-        self.rb_full.pack(anchor="w", padx=25, pady=5)
+        self.rb_full.pack(side="left", padx=(0, 15))
+
+        ctk.CTkLabel(mode_full_row, text="Số câu hỏi:", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
+        self.cbo_num_q = ctk.CTkComboBox(mode_full_row, values=["40", "20"], width=80)
+        self.cbo_num_q.set("40")
+        self.cbo_num_q.pack(side="left", padx=5)
 
         self.rb_thpt = ctk.CTkRadioButton(
             mode_frame, text="Chế độ 2: Đề chuẩn Tốt nghiệp THPT mới (Bộ GD&ĐT - 3 Phần)", 
@@ -612,12 +621,18 @@ class OMRGradingApp(ctk.CTk):
                     "part3": p3_dict
                 }
 
+        try:
+            num_q = int(self.cbo_num_q.get()) if mode == ExamMode.FULL_MCQ else 40
+        except Exception:
+            num_q = 40
+
         exam = Exam(
             exam_id=exam_id,
             title=title,
             subject=subject,
             class_name=class_name,
             mode=mode,
+            num_questions=num_q,
             answer_keys=answer_keys,
             student_roster=getattr(self, "new_exam_roster", {})
         )
@@ -962,10 +977,15 @@ class OMRGradingApp(ctk.CTk):
 
             disp_name = (sub.student_name or f"Thí sinh SBD {sub.student_id}") + src_tag
             ctk.CTkLabel(row, text=disp_name, width=180, anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(row, text=sub.exam_code or "101", width=60).pack(side="left", padx=5)
+            ctk.CTkLabel(row, text=sub.exam_code or "???", width=60).pack(side="left", padx=5)
             
-            score_str = f"{sub.total_score:.2f}"
-            ctk.CTkLabel(row, text=score_str, width=90, font=ctk.CTkFont(weight="bold")).pack(side="left", padx=5)
+            if sub.status == "Lỗi":
+                score_str = "-"
+                score_color = "#C0392B"
+            else:
+                score_str = f"{sub.total_score:.2f}"
+                score_color = "#27AE60" if sub.total_score >= 5.0 else "#C0392B"
+            ctk.CTkLabel(row, text=score_str, width=90, font=ctk.CTkFont(weight="bold"), text_color=score_color).pack(side="left", padx=5)
 
             # Màu trạng thái
             st_color = "#27AE60" if sub.status == "Đã chấm" else ("#D4AC0D" if sub.status == "Cần kiểm tra" else "#C0392B")
@@ -1040,19 +1060,32 @@ class OMRGradingApp(ctk.CTk):
 
         for idx, img_path in enumerate(self.selected_image_files, start=1):
             fname = os.path.basename(img_path)
-            self.lbl_progress.configure(text=f"Đang chấm {idx}/{total}: {fname}...")
-            self.progress_bar.set(idx / total)
+            
+            # Cập nhật tiến độ trên luồng chính (Thread-safe)
+            self.after(0, lambda i=idx, f=fname: (
+                self.lbl_progress.configure(text=f"Đang chấm {i}/{total}: {f}..."),
+                self.progress_bar.set(i / total)
+            ))
 
-            # Lấy tên học sinh nếu file có định dạng (vd: 001_NguyenVanA.png)
             name_part = os.path.splitext(fname)[0]
             tokens = name_part.split("_")
             s_name = tokens[1] if len(tokens) > 1 and not tokens[1].isdigit() else ""
 
-            sub = process_single_submission(
-                image_path=img_path,
-                exam=self.current_exam,
-                student_name_override=s_name
-            )
+            try:
+                sub = process_single_submission(
+                    image_path=img_path,
+                    exam=self.current_exam,
+                    student_name_override=s_name
+                )
+            except Exception as e:
+                sub = Submission(
+                    submission_id=f"sub_{name_part}",
+                    exam_id=self.current_exam.exam_id,
+                    image_path=img_path,
+                    status="Lỗi",
+                    error_message=f"Lỗi khi đọc file: {str(e)}"
+                )
+
             # Thay thế nếu đã tồn tại cùng submission_id, hoặc thêm mới
             existing_idx = next((i for i, s in enumerate(new_submissions) if s.submission_id == sub.submission_id), -1)
             if existing_idx >= 0:
@@ -1064,10 +1097,14 @@ class OMRGradingApp(ctk.CTk):
         self.current_submissions = new_submissions
         save_submissions(self.current_exam.exam_id, self.current_submissions)
 
-        self.lbl_progress.configure(text=f"Hoàn thành! Đã chấm xong {total} bài thi.")
-        self.btn_start_grading.configure(state="normal")
-        self.render_submission_table()
-        messagebox.showinfo("Hoàn thành", f"Đã quét và chấm xong {total} bài làm!")
+        # Chuyển toàn bộ cập nhật giao diện hoàn tất về luồng chính
+        def on_grading_complete():
+            self.lbl_progress.configure(text=f"Hoàn thành! Đã chấm xong {total} bài thi.")
+            self.btn_start_grading.configure(state="normal")
+            self.render_submission_table()
+            messagebox.showinfo("Hoàn thành", f"Đã quét và chấm xong {total} bài làm!")
+
+        self.after(0, on_grading_complete)
 
     # =================================================================
     # VIEW 4: REVIEW CHI TIẾT & SỬA LỖI TAY (CHỈNH SỬA & CHẤM LẠI TRỰC TIẾP)
@@ -1142,7 +1179,16 @@ class OMRGradingApp(ctk.CTk):
             text=f"Tổng điểm: {sub.total_score:.2f} / 10.0", 
             font=ctk.CTkFont(weight="bold", size=15), text_color="#E74C3C"
         )
-        lbl_modal_score.grid(row=3, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="w")
+        lbl_modal_score.grid(row=3, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
+
+        # Cảnh báo SBD / Mã đề nghi vấn nếu có
+        if "?" in (sub.exam_code or "") or "?" in (sub.student_id or "") or sub.error_message:
+            warn_header_txt = f"⚠️ Cảnh báo: {sub.error_message or 'SBD/Mã đề chưa rõ ràng'}. Vui lòng kiểm tra và sửa lại!"
+            lbl_modal_warn = ctk.CTkLabel(
+                info_box, text=warn_header_txt, text_color="#C0392B",
+                font=ctk.CTkFont(weight="bold", size=12), wraplength=420, justify="left"
+            )
+            lbl_modal_warn.grid(row=4, column=0, columnspan=2, padx=10, pady=(0, 8), sticky="w")
 
         # Bảng đối soát thông minh: OCR & Excel Roster
         roster_name, roster_cls = lookup_student_in_roster(sub.student_id, getattr(self.current_exam, "student_roster", {}))
@@ -1321,17 +1367,27 @@ class OMRGradingApp(ctk.CTk):
             sub.student_id = new_sbd
             sub.exam_code = new_code
 
+            # Kiểm tra mã đề: KHÔNG tự ý lấy key khác nếu mã đề không khớp!
+            active_key = self.current_exam.answer_keys.get(sub.exam_code)
+            if not active_key:
+                valid_codes = ", ".join(self.current_exam.answer_keys.keys()) or "Chưa có"
+                messagebox.showerror(
+                    "Mã đề không hợp lệ",
+                    f"Mã đề '{sub.exam_code}' không có trong bộ đáp án của kỳ thi!\n"
+                    f"Các mã đề hợp lệ hiện có: {valid_codes}\n"
+                    f"Vui lòng sửa lại đúng mã đề trước khi chấm lại."
+                )
+                return
+
             # 2. Cập nhật đáp án đã sửa
             if self.current_exam.mode == ExamMode.FULL_MCQ:
                 new_answers = {}
-                for q_i in range(1, 41):
-                    val = editor_widgets[f"mcq_{q_i}"].get()
+                num_q = getattr(self.current_exam, "num_questions", 40) or 40
+                for q_i in range(1, num_q + 1):
+                    w = editor_widgets.get(f"mcq_{q_i}")
+                    val = w.get() if w else None
                     new_answers[q_i] = val if val != "Trống" else None
                 sub.extracted_data["answers"] = new_answers
-
-                active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
-                if not active_key and self.current_exam.answer_keys:
-                    active_key = list(self.current_exam.answer_keys.values())[0]
 
                 res = grade_full_mcq(new_answers, active_key, self.current_exam.max_score)
                 sub.total_score = res["score"]
@@ -1340,31 +1396,31 @@ class OMRGradingApp(ctk.CTk):
                 sub.blank_count = res["blank_count"]
                 sub.status = "Đã chấm"
                 sub.needs_review = False
+                sub.error_message = ""
             else:
                 # Cập nhật P1, P2, P3
                 new_p1 = {}
                 for q_i in range(1, 13):
-                    val = editor_widgets[f"p1_{q_i}"].get()
+                    w = editor_widgets.get(f"p1_{q_i}")
+                    val = w.get() if w else None
                     new_p1[q_i] = val if val != "Trống" else None
 
                 new_p2 = {}
                 for q_i in range(1, 5):
                     new_p2[q_i] = {}
                     for sub_k in ['a', 'b', 'c', 'd']:
-                        val = editor_widgets[f"p2_{q_i}_{sub_k}"].get()
+                        w = editor_widgets.get(f"p2_{q_i}_{sub_k}")
+                        val = w.get() if w else None
                         new_p2[q_i][sub_k] = val if val != "Trống" else None
 
                 new_p3 = {}
                 for q_i in range(1, 7):
-                    new_p3[q_i] = editor_widgets[f"p3_{q_i}"].get().strip()
+                    w = editor_widgets.get(f"p3_{q_i}")
+                    new_p3[q_i] = w.get().strip() if w else ""
 
                 sub.extracted_data["part1"] = new_p1
                 sub.extracted_data["part2"] = new_p2
                 sub.extracted_data["part3"] = new_p3
-
-                active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
-                if not active_key and self.current_exam.answer_keys:
-                    active_key = list(self.current_exam.answer_keys.values())[0]
 
                 res = grade_thpt_2025(sub.extracted_data, active_key)
                 sub.score_part1 = res["score_part1"]
@@ -1374,11 +1430,15 @@ class OMRGradingApp(ctk.CTk):
                 sub.correct_count = res["p1_correct"] + res["p3_correct"]
                 sub.status = "Đã chấm"
                 sub.needs_review = False
+                sub.error_message = ""
 
-            # Vẽ lại ảnh overlay nếu có
+            # Vẽ lại ảnh overlay từ ảnh đã căn chỉnh (align_paper) để tránh lệch tọa độ
             if sub.image_path and os.path.exists(sub.image_path):
                 try:
-                    aligned_img = imread_utf8(sub.image_path)
+                    succ_align, aligned_img, _ = align_paper(sub.image_path)
+                    if not succ_align or aligned_img is None:
+                        aligned_img = imread_utf8(sub.image_path)
+
                     if aligned_img is not None:
                         new_overlay = draw_grading_overlay(
                             aligned_img=aligned_img,
@@ -1387,10 +1447,30 @@ class OMRGradingApp(ctk.CTk):
                             answer_key=active_key,
                             score_info=res
                         )
-                        if sub.annotated_image_path:
-                            imwrite_utf8(sub.annotated_image_path, new_overlay)
+                        if not sub.annotated_image_path:
+                            sub.annotated_image_path = os.path.join(
+                                os.path.join(PROJECT_ROOT, "data", "annotated"),
+                                f"result_{os.path.basename(sub.image_path)}"
+                            )
+                        imwrite_utf8(sub.annotated_image_path, new_overlay)
+
+                        # Cập nhật ảnh hiển thị trực tiếp trên modal
+                        try:
+                            pil_img = Image.open(sub.annotated_image_path)
+                            pil_img.thumbnail((620, 720))
+                            ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=pil_img.size)
+                            lbl_img.configure(image=ctk_img)
+                            lbl_img.image = ctk_img
+                        except Exception as reload_err:
+                            print("Lỗi reload preview:", reload_err)
                 except Exception as ex:
                     print("Lỗi cập nhật ảnh overlay:", ex)
+
+            # Lưu vào storage
+            save_submissions(self.current_exam.exam_id, self.current_submissions)
+            self.render_submission_table()
+            lbl_modal_score.configure(text=f"Tổng điểm: {sub.total_score:.2f} / 10.0")
+            messagebox.showinfo("Thành công", f"Đã cập nhật bài làm! Điểm số mới: {sub.total_score:.2f}")
 
             # Lưu vào storage
             save_submissions(self.current_exam.exam_id, self.current_submissions)
@@ -1451,8 +1531,17 @@ class OMRGradingApp(ctk.CTk):
         )
         title.pack(anchor="w", pady=(0, 15))
 
-        scores = [s.total_score for s in self.current_submissions]
-        total_subs = len(scores)
+        # Phân loại bài nộp: Loại bỏ bài lỗi khỏi thống kê điểm số
+        valid_subs = [s for s in self.current_submissions if s.status != "Lỗi"]
+        error_subs = [s for s in self.current_submissions if s.status == "Lỗi"]
+        review_subs = [s for s in self.current_submissions if s.status == "Cần kiểm tra"]
+        scored_subs = [
+            s for s in valid_subs 
+            if s.status == "Đã chấm" or (s.status == "Cần kiểm tra" and (s.exam_code in (self.current_exam.answer_keys or {})))
+        ]
+
+        scores = [s.total_score for s in scored_subs]
+        num_scored = len(scores)
 
         # 4 Thẻ KPI
         kpi_frame = ctk.CTkFrame(container, fg_color="transparent")
@@ -1465,20 +1554,24 @@ class OMRGradingApp(ctk.CTk):
             ctk.CTkLabel(box, text=label, font=ctk.CTkFont(size=12), text_color="#FFFFFF").pack(pady=(10, 2))
             ctk.CTkLabel(box, text=str(value), font=ctk.CTkFont(size=22, weight="bold"), text_color="#FFFFFF").pack(pady=(0, 10))
 
-        avg = round(sum(scores) / max(total_subs, 1), 2) if total_subs else 0.0
+        avg = round(sum(scores) / max(num_scored, 1), 2) if num_scored else 0.0
         max_s = max(scores) if scores else 0.0
         min_s = min(scores) if scores else 0.0
 
-        make_kpi(0, "Tổng bài đã chấm", total_subs, "#2980B9")
-        make_kpi(1, "Điểm trung bình", avg, "#27AE60")
+        make_kpi(0, "Tổng bài tiếp nhận", f"{len(self.current_submissions)} (Lỗi: {len(error_subs)})", "#2980B9")
+        make_kpi(1, "Điểm TB (bài hợp lệ)", avg, "#27AE60")
         make_kpi(2, "Điểm cao nhất", max_s, "#8E44AD")
-        make_kpi(3, "Điểm thấp nhất", min_s, "#E67E22")
+        make_kpi(3, "Cần kiểm tra / Lỗi", f"{len(review_submissions)} / {len(error_subs)}", "#E67E22")
 
-        # Phân loại học sinh
+        # Phân loại học sinh (chỉ tính trên bài thi hợp lệ)
         dist_frame = ctk.CTkFrame(container)
         dist_frame.pack(fill="x", pady=15, padx=5)
 
-        ctk.CTkLabel(dist_frame, text="Phân bố kết quả xếp loại:", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+        ctk.CTkLabel(
+            dist_frame, 
+            text=f"Phân bố kết quả xếp loại ({num_scored} bài hợp lệ - đã loại {len(error_subs)} bài lỗi):", 
+            font=ctk.CTkFont(weight="bold")
+        ).pack(anchor="w", padx=15, pady=(10, 5))
 
         c_gioi = sum(1 for s in scores if s >= 8.0)
         c_kha = sum(1 for s in scores if 6.5 <= s < 8.0)
@@ -1493,7 +1586,7 @@ class OMRGradingApp(ctk.CTk):
             b = ctk.CTkFrame(dist_grid, fg_color=("gray85", "gray25"), corner_radius=6)
             b.grid(row=0, column=col, padx=5, pady=5, sticky="ew")
             ctk.CTkLabel(b, text=name, font=ctk.CTkFont(size=12, weight="bold"), text_color=color).pack(pady=(5, 0))
-            ctk.CTkLabel(b, text=f"{count} bài ({round(count/max(total_subs,1)*100, 1)}%)").pack(pady=(0, 5))
+            ctk.CTkLabel(b, text=f"{count} bài ({round(count/max(num_scored,1)*100, 1)}%)").pack(pady=(0, 5))
 
         make_rank_badge(0, "Giỏi (>=8.0đ)", c_gioi, "#27AE60")
         make_rank_badge(1, "Khá (6.5-7.9đ)", c_kha, "#2980B9")
@@ -1537,7 +1630,11 @@ class OMRGradingApp(ctk.CTk):
         if success:
             messagebox.showinfo("Thành công", f"Đã xuất báo cáo Excel thành công tại:\n{out_path}")
         else:
-            messagebox.showerror("Lỗi", "Không thể xuất file Excel báo cáo.")
+            messagebox.showerror(
+                "Lỗi xuất báo cáo", 
+                f"Không thể xuất file Excel báo cáo!\n"
+                f"Vui lòng đóng file Excel nếu đang mở trong ứng dụng khác và kiểm tra quyền ghi thư mục."
+            )
 
 
 if __name__ == "__main__":

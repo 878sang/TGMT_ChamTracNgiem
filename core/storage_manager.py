@@ -9,8 +9,22 @@ from typing import List, Optional, Dict
 from core.models import Exam, Submission, ExamMode
 
 
-DATA_DIR = "d:/Thị giác máy tính/Đồ Án/data"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 EXAMS_FILE = os.path.join(DATA_DIR, "exams.json")
+
+
+def set_data_dir(custom_path: str):
+    """Cho phép tùy biến thư mục lưu dữ liệu theo cấu hình người dùng"""
+    global DATA_DIR, EXAMS_FILE
+    DATA_DIR = os.path.abspath(custom_path)
+    EXAMS_FILE = os.path.join(DATA_DIR, "exams.json")
+    ensure_data_dir()
+
+
+def get_data_dir() -> str:
+    """Lấy đường dẫn thư mục dữ liệu hiện tại"""
+    return DATA_DIR
 
 
 def ensure_data_dir():
@@ -26,6 +40,17 @@ def get_all_exams() -> List[Exam]:
         with open(EXAMS_FILE, "r", encoding="utf-8") as f:
             raw_list = json.load(f)
             return [Exam.from_dict(item) for item in raw_list]
+    except json.JSONDecodeError as jde:
+        print(f"[CẢNH BÁO] File exams.json bị lỗi cấu trúc: {jde}")
+        # Sao lưu file hỏng để tránh mất dữ liệu hoàn toàn
+        backup_path = EXAMS_FILE + ".bak"
+        try:
+            import shutil
+            shutil.copyfile(EXAMS_FILE, backup_path)
+            print(f"Đã sao lưu file lỗi sang: {backup_path}")
+        except Exception:
+            pass
+        return []
     except Exception as e:
         print(f"Lỗi đọc danh sách bài kiểm tra: {e}")
         return []

@@ -416,11 +416,15 @@ def import_thpt_answer_key_from_excel(filepath: str, sheet_name: Optional[str] =
 # Chạy thử nghiệm độc lập module
 # ------------------------------------------------------------------------------
 if __name__ == "__main__":
-    thpt_file = "d:/Thị giác máy tính/Đồ Án/templates/mau_dap_an_thpt_2025.xlsx"
-    imported_thpt = import_thpt_answer_key_from_excel(thpt_file)
-    print("Test import THPT 2025 thanh cong:")
-    print("Part 1 (4 lua chon):", imported_thpt["part1"])
-    print("Part 2 (Dung/Sai):", imported_thpt["part2"])
-    print("Part 3 (Tra loi ngan):", imported_thpt["part3"])
+    PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    thpt_file = os.path.join(PROJECT_ROOT, "templates", "mau_dap_an_thpt_2025.xlsx")
+    if os.path.exists(thpt_file):
+        imported_thpt = import_thpt_answer_key_from_excel(thpt_file)
+        print("Test import THPT 2025 thanh cong:")
+        print("Part 1 (4 lua chon):", imported_thpt["part1"])
+        print("Part 2 (Dung/Sai):", imported_thpt["part2"])
+        print("Part 3 (Tra loi ngan):", imported_thpt["part3"])
+    else:
+        print(f"File mau khong ton tai tai: {thpt_file}")
 
 

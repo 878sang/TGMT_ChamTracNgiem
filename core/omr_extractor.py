@@ -50,13 +50,17 @@ def get_bubble_density(gray_img: np.ndarray, cx: int, cy: int, radius: int = 12)
     return float(filled_pixels) / float(total_mask_pixels)
 
 
-def extract_sbd(gray_img: np.ndarray) -> Tuple[str, float]:
+def extract_sbd(gray_img: np.ndarray) -> Tuple[str, bool, float]:
     """
     Quét khối Số Báo Danh (6 cột x 10 hàng 0-9)
     Tâm các ô: cx = 160 + col * 65, cy = 200 + row * 25
+    Trả về: (sbd_string, is_valid: bool, min_confidence: float)
+    Nếu cột không được tô hoặc tô không rõ ràng, không tự gán số mặc định ('0')
+    mà đánh dấu '?' để cảnh báo người dùng xác nhận.
     """
     sbd_digits = []
     min_confidence = 1.0
+    is_valid = True
 
     for col in range(6):
         cx = 160 + col * 65
@@ -68,21 +72,31 @@ def extract_sbd(gray_img: np.ndarray) -> Tuple[str, float]:
         conf = sorted_d[0] - sorted_d[1]
         min_confidence = min(min_confidence, conf)
 
-        if max_val < 0.20:
-            sbd_digits.append("0")  # Mặc định nếu không tô rõ
+        if max_val < 0.22:
+            # Cột bị bỏ trống hoặc tô quá mờ
+            sbd_digits.append("?")
+            is_valid = False
+        elif sorted_d[1] >= 0.22 and conf < 0.12:
+            # Nghi vấn tô 2 ô cùng 1 cột hoặc tẩy lem
+            sbd_digits.append("?")
+            is_valid = False
         else:
             sbd_digits.append(str(max_idx))
 
-    return "".join(sbd_digits), min_confidence
+    return "".join(sbd_digits), is_valid, min_confidence
 
 
-def extract_exam_code(gray_img: np.ndarray) -> Tuple[str, float]:
+def extract_exam_code(gray_img: np.ndarray) -> Tuple[str, bool, float]:
     """
     Quét khối Mã Đề Thi (3 cột x 10 hàng 0-9)
     Tâm các ô: cx = 680 + col * 65, cy = 200 + row * 25
+    Trả về: (code_string, is_valid: bool, min_confidence: float)
+    Nếu không đọc được hoặc nghi vấn, không tự gán số mặc định ('100')
+    mà trả về '?' và is_valid = False để cảnh báo người dùng xác nhận.
     """
     code_digits = []
     min_confidence = 1.0
+    is_valid = True
 
     for col in range(3):
         cx = 680 + col * 65
@@ -94,12 +108,16 @@ def extract_exam_code(gray_img: np.ndarray) -> Tuple[str, float]:
         conf = sorted_d[0] - sorted_d[1]
         min_confidence = min(min_confidence, conf)
 
-        if max_val < 0.20:
-            code_digits.append("1" if col == 0 else "0")
+        if max_val < 0.22:
+            code_digits.append("?")
+            is_valid = False
+        elif sorted_d[1] >= 0.22 and conf < 0.12:
+            code_digits.append("?")
+            is_valid = False
         else:
             code_digits.append(str(max_idx))
 
-    return "".join(code_digits), min_confidence
+    return "".join(code_digits), is_valid, min_confidence
 
 
 def extract_full_mcq_answers(gray_img: np.ndarray, num_questions: int = 40) -> Tuple[Dict[int, Any], bool]:
@@ -196,7 +214,7 @@ def extract_thpt_2025_answers(gray_img: np.ndarray) -> Tuple[Dict[str, Any], boo
                 part2[q_num][sub] = "Đ" if d_d > d_s else "S"
 
     # -------------------------------------------------------------
-    # 3. Nhận diện PHẦN III (6 câu Trả lời ngắn)
+    # 3. Nhận diện PHẦN III (6 câu Trả lời ngắn - Bảng tô số 4 cột)
     # -------------------------------------------------------------
     part3 = {}
     for q_idx in range(6):
@@ -209,38 +227,65 @@ def extract_thpt_2025_answers(gray_img: np.ndarray) -> Tuple[Dict[str, Any], boo
         # Quét dấu '-' ở cột 0 và dấu ',' ở cột 1
         d_minus = get_bubble_density(gray_img, bx + 95, by + 16, radius=5)
         d_comma = get_bubble_density(gray_img, bx + 95 + 48, by + 16, radius=5)
-        is_neg = (d_minus >= 0.45)
-        has_comma = (d_comma >= 0.45)
+        is_neg = (d_minus >= 0.40)
+        has_comma = (d_comma >= 0.40)
 
-        digits = []
-        has_any_bubble = is_neg or has_comma
-
+        # Quét độc lập từng cột số 0, 1, 2, 3
+        col_digits = [None, None, None, None]
         for c in range(4):
             cx = bx + 95 + c * 48
             col_densities = [get_bubble_density(gray_img, cx, by + 32 + d * 12, radius=5) for d in range(10)]
             sorted_d = sorted(col_densities, reverse=True)
-            best_d = int(col_densities.index(sorted_d[0]))
+            max_val = sorted_d[0]
+            sec_val = sorted_d[1]
+            best_d = int(col_densities.index(max_val))
 
-            # Ngưỡng nhận diện: bubble tô chì có độ đậm cao và chênh lệch rõ so với ô trắng
-            if sorted_d[0] >= 0.50 and (sorted_d[0] - sorted_d[1]) >= 0.20:
-                has_any_bubble = True
-                digits.append(str(best_d))
-            elif sorted_d[0] >= 0.35 and (sorted_d[0] - sorted_d[1]) < 0.12:
-                # Nghi vấn tô lem hoặc tẩy mờ
+            if max_val < 0.22:
+                # Cột này để trống
+                col_digits[c] = None
+            elif sec_val >= 0.30 and (max_val - sec_val) < 0.15:
+                # Tô trùng nhiều ô hoặc tẩy lem nhem trong cùng 1 cột
                 needs_review = True
+                col_digits[c] = "?"
+            elif max_val >= 0.45 and (max_val - sec_val) >= 0.15:
+                col_digits[c] = str(best_d)
+            elif max_val >= 0.25:
+                # Ô tô hơi mờ hoặc nghi vấn
+                needs_review = True
+                col_digits[c] = str(best_d)
+            else:
+                col_digits[c] = None
 
-        if not has_any_bubble or not digits:
+        # Kiểm tra xem cả câu có tô ô nào không
+        filled_indices = [i for i, v in enumerate(col_digits) if v is not None]
+
+        if not filled_indices and not is_neg and not has_comma:
+            # Học sinh bỏ trống toàn bộ câu này
             part3[q_num] = ""
         else:
+            # Kiểm tra lỗi: Có cột bị bỏ trống xen kẽ ở giữa không (ví dụ ['1', None, '5'])
             prefix = "-" if is_neg else ""
-            if has_comma:
-                if len(digits) == 1:
-                    val_res = prefix + digits[0]
+            if filled_indices:
+                min_i = min(filled_indices)
+                max_i = max(filled_indices)
+                has_gap = any(col_digits[i] is None for i in range(min_i, max_i + 1))
+                if has_gap:
+                    # Báo cờ cần kiểm tra do bỏ trống cột ở giữa các chữ số
+                    needs_review = True
+
+                digits_list = [col_digits[i] if col_digits[i] is not None else "?" for i in range(min_i, max_i + 1)]
+                if has_comma:
+                    if len(digits_list) == 1:
+                        val_res = prefix + digits_list[0]
+                    else:
+                        val_res = prefix + digits_list[0] + "." + "".join(digits_list[1:])
                 else:
-                    val_res = prefix + digits[0] + "." + "".join(digits[1:])
+                    val_res = prefix + "".join(digits_list)
+                part3[q_num] = val_res
             else:
-                val_res = prefix + "".join(digits)
-            part3[q_num] = val_res
+                # Chỉ tô dấu '-' hoặc ',' mà không tô số
+                needs_review = True
+                part3[q_num] = prefix + ("." if has_comma else "?")
 
     result_data = {
         "part1": part1,
@@ -250,26 +295,45 @@ def extract_thpt_2025_answers(gray_img: np.ndarray) -> Tuple[Dict[str, Any], boo
     return result_data, needs_review
 
 
-def extract_all_data(aligned_bgr: np.ndarray, mode: str = ExamMode.FULL_MCQ) -> Dict[str, Any]:
+def extract_all_data(
+    aligned_bgr: np.ndarray, 
+    mode: str = ExamMode.FULL_MCQ,
+    num_questions: int = 40
+) -> Dict[str, Any]:
     """
     Hàm tổng hợp trích xuất toàn bộ thông tin từ ảnh phiếu đã căn chỉnh.
+    Tự động kiểm tra tính hợp lệ của SBD, Mã đề và cấu trúc đáp án.
     """
     gray = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2GRAY) if len(aligned_bgr.shape) == 3 else aligned_bgr
 
-    sbd, conf_sbd = extract_sbd(gray)
-    code, conf_code = extract_exam_code(gray)
+    sbd, is_valid_sbd, conf_sbd = extract_sbd(gray)
+    code, is_valid_code, conf_code = extract_exam_code(gray)
+
+    header_warnings = []
+    if not is_valid_sbd or "?" in sbd:
+        header_warnings.append(f"SBD chưa rõ hoặc nghi vấn: '{sbd}'")
+    if not is_valid_code or "?" in code:
+        header_warnings.append(f"Mã đề chưa rõ hoặc nghi vấn: '{code}'")
+
+    needs_review_header = (not is_valid_sbd) or (not is_valid_code) or (conf_sbd < 0.15) or (conf_code < 0.15)
 
     if mode == ExamMode.FULL_MCQ:
-        answers, needs_rev = extract_full_mcq_answers(gray, num_questions=40)
+        answers, needs_rev = extract_full_mcq_answers(gray, num_questions=num_questions)
         return {
             "sbd": sbd,
+            "is_valid_sbd": is_valid_sbd,
             "exam_code": code,
+            "is_valid_code": is_valid_code,
+            "header_warning": "; ".join(header_warnings),
             "answers": answers,
-            "needs_review": needs_rev or (conf_sbd < 0.15) or (conf_code < 0.15)
+            "needs_review": needs_rev or needs_review_header
         }
     else:
         thpt_data, needs_rev = extract_thpt_2025_answers(gray)
         thpt_data["sbd"] = sbd
+        thpt_data["is_valid_sbd"] = is_valid_sbd
         thpt_data["exam_code"] = code
-        thpt_data["needs_review"] = needs_rev or (conf_sbd < 0.15) or (conf_code < 0.15)
+        thpt_data["is_valid_code"] = is_valid_code
+        thpt_data["header_warning"] = "; ".join(header_warnings)
+        thpt_data["needs_review"] = needs_rev or needs_review_header
         return thpt_data
