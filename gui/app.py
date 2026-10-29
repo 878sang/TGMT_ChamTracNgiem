@@ -35,6 +35,7 @@ from core.student_roster_handler import (
     lookup_student_in_roster
 )
 from core.exam_processor import process_single_submission
+from core.image_alignment import align_paper
 from core.grading_engine import grade_full_mcq, grade_thpt_2025
 from core.visualizer import draw_grading_overlay
 from core.cv_utils import imread_utf8, imwrite_utf8
