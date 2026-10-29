@@ -1248,7 +1248,13 @@ class OMRGradingApp(ctk.CTk):
             ans_dict = sub.extracted_data.get("answers", {})
             active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
             if not active_key and self.current_exam.answer_keys:
-                active_key = list(self.current_exam.answer_keys.values())[0]
+                valid_codes = ", ".join(self.current_exam.answer_keys.keys()) or "Chưa có"
+                ctk.CTkLabel(
+                    right_frame,
+                    text=f"⚠️ Mã đề '{sub.exam_code}' không có đáp án! (Mã hợp lệ: {valid_codes}). Hãy sửa mã đề rồi bấm 'Lưu & Chấm lại'.",
+                    text_color="#C0392B", font=ctk.CTkFont(weight="bold", size=12),
+                    wraplength=420, justify="left"
+                ).pack(anchor="w", pady=5, padx=5)
             _num_q_editor = getattr(self.current_exam, "num_questions", 40) or 40
 
             for q_i in range(1, _num_q_editor + 1):
@@ -1278,7 +1284,13 @@ class OMRGradingApp(ctk.CTk):
         else:
             active_key = self.current_exam.answer_keys.get(sub.exam_code, {})
             if not active_key and self.current_exam.answer_keys:
-                active_key = list(self.current_exam.answer_keys.values())[0]
+                valid_codes = ", ".join(self.current_exam.answer_keys.keys()) or "Chưa có"
+                ctk.CTkLabel(
+                    right_frame,
+                    text=f"⚠️ Mã đề '{sub.exam_code}' không có đáp án! (Mã hợp lệ: {valid_codes}). Hãy sửa mã đề rồi bấm 'Lưu & Chấm lại'.",
+                    text_color="#C0392B", font=ctk.CTkFont(weight="bold", size=12),
+                    wraplength=420, justify="left"
+                ).pack(anchor="w", pady=5, padx=5)
 
             # PHẦN I
             ctk.CTkLabel(right_frame, text="[Phần I: 12 câu 4 lựa chọn]", font=ctk.CTkFont(weight="bold")).pack(anchor="w", pady=(5, 2))
