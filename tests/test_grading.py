@@ -281,3 +281,116 @@ def test_excel_exporter_excludes_error_submissions(tmp_path):
 
     assert avg_cell_val == 7.5, f"Điểm trung bình phải là 7.5 (đã loại bài lỗi), nhưng nhận được: {avg_cell_val}"
 
+
+
+# ==============================================================================
+# 5. KIỂM THỬ BỔ SUNG: TRƯỜNG HỢP BIÊN & EDGE CASES
+# ==============================================================================
+def test_full_mcq_string_vs_int_keys():
+    """Kiểm tra chấm điểm hoạt động đúng khi key là string '1' hoặc int 1"""
+    key_str = {"1": "A", "2": "B", "3": "C", "4": "D"}
+    student_int = {1: "A", 2: "B", 3: "C", 4: "D"}
+    res = grade_full_mcq(student_int, key_str, max_score=10.0)
+    assert res["correct_count"] == 4
+    assert res["score"] == 10.0
+
+
+def test_full_mcq_case_insensitive():
+    """Đáp án viết thường/hoa đều phải khớp"""
+    key = {1: "a", 2: "b"}
+    student = {1: "A", 2: "B"}
+    res = grade_full_mcq(student, key, max_score=10.0)
+    assert res["correct_count"] == 2
+    assert res["score"] == 10.0
+
+
+def test_full_mcq_single_question():
+    """Trường hợp biên: Chỉ có 1 câu hỏi"""
+    key = {1: "A"}
+    student = {1: "A"}
+    res = grade_full_mcq(student, key, max_score=10.0)
+    assert res["score"] == 10.0
+    assert res["total_questions"] == 1
+
+
+def test_thpt_all_blank():
+    """THPT: Bỏ trống hoàn toàn cả 3 phần -> 0.0 điểm"""
+    key = {
+        "part1": {i: "A" for i in range(1, 13)},
+        "part2": {i: {'a': 'Đ', 'b': 'S', 'c': 'Đ', 'd': 'S'} for i in range(1, 5)},
+        "part3": {i: str(i * 10) for i in range(1, 7)}
+    }
+    student = {
+        "part1": {},
+        "part2": {},
+        "part3": {}
+    }
+    res = grade_thpt_2025(student, key)
+    assert res["total_score"] == 0.0
+    assert res["score_part1"] == 0.0
+    assert res["score_part2"] == 0.0
+    assert res["score_part3"] == 0.0
+
+
+def test_thpt_part2_zero_correct():
+    """THPT Phần II: 0 ý đúng -> 0.0đ"""
+    key_p2 = {1: {'a': 'Đ', 'b': 'S', 'c': 'Đ', 'd': 'S'}}
+    student_p2 = {1: {'a': 'S', 'b': 'Đ', 'c': 'S', 'd': 'Đ'}}
+    res = grade_thpt_2025({"part2": student_p2}, {"part2": key_p2})
+    assert res["score_part2"] == 0.0
+
+
+def test_thpt_part2_all_four_correct():
+    """THPT Phần II: 4 ý đúng trong 1 câu -> 1.0đ (lũy tiến)"""
+    key_p2 = {1: {'a': 'Đ', 'b': 'S', 'c': 'Đ', 'd': 'S'}}
+    student_p2 = {1: {'a': 'Đ', 'b': 'S', 'c': 'Đ', 'd': 'S'}}
+    res = grade_thpt_2025({"part2": student_p2}, {"part2": key_p2})
+    assert res["score_part2"] == 1.0
+
+
+def test_normalize_numeric_edge_cases():
+    """Trường hợp biên chuẩn hóa số"""
+    assert normalize_numeric_string(None) == ""
+    assert normalize_numeric_string("") == ""
+    assert normalize_numeric_string("0") == "0"
+    assert normalize_numeric_string("0.0") == "0"
+    assert normalize_numeric_string("-0") == "0"
+    assert normalize_numeric_string("  15  ") == "15"
+    assert normalize_numeric_string("3,14") == "3.14"
+    assert normalize_numeric_string("abc") == "abc"
+
+
+def test_exam_code_lookup_no_fallback():
+    """Kiểm tra: Mã đề '999' không tồn tại -> KHÔNG trả về đáp án mã khác"""
+    exam = Exam(
+        exam_id="ex_nofallback",
+        title="Test No Fallback",
+        mode=ExamMode.FULL_MCQ,
+        answer_keys={"101": {1: "A", 2: "B"}}
+    )
+    # Truy xuất trực tiếp - không fallback
+    key = exam.answer_keys.get("999")
+    assert key is None, "Mã đề '999' PHẢI trả về None, không được fallback!"
+
+
+def test_thpt_part3_negative_and_decimal():
+    """THPT Phần III: Số âm và thập phân khớp đúng"""
+    key_p3 = {1: "-2.5", 2: "0.75", 3: "-8"}
+    student_p3 = {1: "-2,5", 2: ".75", 3: "-8.0"}
+    res = grade_thpt_2025({"part3": student_p3}, {"part3": key_p3})
+    assert res["p3_correct"] == 3
+    assert res["score_part3"] == 1.5
+
+
+def test_submission_status_values():
+    """Kiểm tra tất cả trạng thái Submission hợp lệ"""
+    sub = Submission(submission_id="test", exam_id="test")
+    assert sub.status == "Chưa chấm"
+    assert sub.needs_review == False
+    assert sub.error_message == ""
+    
+    # Kiểm tra to_dict/from_dict round-trip
+    d = sub.to_dict()
+    sub2 = Submission.from_dict(d)
+    assert sub2.status == sub.status
+    assert sub2.needs_review == sub.needs_review
