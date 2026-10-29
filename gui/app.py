@@ -303,7 +303,7 @@ class OMRGradingApp(ctk.CTk):
         self.rb_full.pack(side="left", padx=(0, 15))
 
         ctk.CTkLabel(mode_full_row, text="Số câu hỏi:", font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
-        self.cbo_num_q = ctk.CTkComboBox(mode_full_row, values=["40", "20"], width=80)
+        self.cbo_num_q = ctk.CTkComboBox(mode_full_row, values=["40", "20", "50"], width=80)
         self.cbo_num_q.set("40")
         self.cbo_num_q.pack(side="left", padx=5)
 
