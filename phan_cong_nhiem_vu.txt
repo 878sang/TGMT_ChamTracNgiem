@@ -126,5 +126,5 @@ THÀNH VIÊN 4: GIAO DIỆN NGƯỜI DÙNG & TÍCH HỢP HỆ THỐNG (FRONTEND 
 III. KẾT QUẢ KIỂM THỬ TOÀN BỘ HỆ THỐNG (TEST RESULTS)
 --------------------------------------------------------------------------------
 - Chạy lệnh: `python -m pytest tests/`
-- Kết quả: 16/16 test passed 100% trong 0.52 giây.
+- Kết quả: 26/26 test passed 100% trong 1.12 giây.
 - Chạy pipeline thực tế: Quét và chấm thành công trên toàn bộ tập ảnh phẳng, ảnh chụp nghiêng góc, thiếu sáng, bóng đổ, mờ và các bài thi có lỗi thực tế.
