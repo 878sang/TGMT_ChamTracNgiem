@@ -212,6 +212,17 @@ class OMRGradingApp(ctk.CTk):
         ).pack(side="left", padx=4)
 
         btn_row2 = ctk.CTkFrame(left_box, fg_color="transparent")
+
+        # Nút "Chụp màn hình" (screenshot)
+        ctk.CTkButton(
+            btn_row2,
+            text="📸 Chụp màn hình",
+            width=120,
+            height=28,
+            fg_color="#2E86AB",
+            hover_color="#1B4F72",
+            command=self._action_screenshot,
+        ).pack(side="left", padx=5)
         btn_row2.pack(fill="x", padx=10, pady=(2, 6))
 
         ctk.CTkButton(
