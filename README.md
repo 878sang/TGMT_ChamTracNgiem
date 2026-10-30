@@ -1,143 +1,124 @@
-# HỆ THỐNG QUÉT VÀ CHẤM BÀI TRẮC NGHIỆM ĐA NĂNG BẰNG PYTHON & THỊ GIÁC MÁY TÍNH (OMR)
+# PHẦN MỀM NHẬN DIỆN VÀ CHẤM PHIẾU TRẢ LỜI TRẮC NGHIỆM THPT (50 CÂU)
 
-> **Đồ án môn học:** Thị giác máy tính (Computer Vision)  
-> **Ngôn ngữ & Thư viện:** Python 3.10+, OpenCV, NumPy, CustomTkinter, OpenPyXL, Pillow, Pytest.
-
----
-
-## 🌟 Điểm nổi bật của Hệ thống
-
-1. **Hỗ trợ 2 Chế độ thi linh hoạt (Dual-Mode):**
-   * **Chế độ 1 - Trắc nghiệm 4 lựa chọn (Full MCQ):** Phục vụ kiểm tra 15 phút, 1 tiết, thi học kỳ (hỗ trợ linh hoạt **20 câu** hoặc **40 câu** trên mẫu phiếu in chuẩn, 4 lựa chọn A-B-C-D, tính điểm đều theo thang 10.0).
-   * **Chế độ 2 - Chuẩn Tốt nghiệp THPT mới (từ 2025 của Bộ GD&ĐT):**
-     * **Phần I:** 12 câu trắc nghiệm 4 lựa chọn A-B-C-D (mỗi câu 0.25đ, tối đa 3.0 điểm).
-     * **Phần II:** 4 câu Đúng / Sai x 4 ý a,b,c,d (chấm lũy tiến: đúng 1 ý = 0.1đ | 2 ý = 0.25đ | 3 ý = 0.5đ | 4 ý = 1.0đ, tối đa 4.0 điểm).
-     * **Phần III:** 6 câu Trả lời ngắn dạng bảng tô số 4 cột gồm dấu `-`, `,` và các số 0-9 (mỗi câu 0.5đ, tối đa 3.0 điểm).
-
-2. **Thị giác máy tính & OMR độ chính xác cao:**
-   * **Thuật toán kiểm soát 4 Marker định vị góc:** Chỉ tiến hành nắn phẳng phối cảnh (Perspective Transform) khi xác định đủ đúng 4 marker hình học hợp lệ ở 4 góc; nếu ảnh bị che khuất hoặc thiếu góc, hệ thống lập tức báo lỗi ảnh rõ ràng thay vì nắn lệch tọa độ.
-   * **Chống méo, chụp nghiêng, bóng đổ, thiếu sáng và mờ:** Tự động thích ứng với ảnh chụp thực tế bằng điện thoại qua bộ tiền xử lý đa ngưỡng Gaussian & Otsu Threshold.
-   * **Nhận diện SBD (6 số) & Mã đề thi (3 số) chuẩn xác:** Tuyệt đối không tự ý gán số mặc định ('000000' hay '100') khi không đọc được. Nếu học sinh bỏ trống hoặc tẩy chì chưa sạch, hệ thống đánh dấu cờ cảnh báo `?` và yêu cầu giáo viên xác nhận.
-   * **Xử lý mã đề thông minh:** Nếu mã đề không tồn tại trong bộ đáp án, bài làm được đưa vào trạng thái **"Cần kiểm tra"**, điểm số giữ 0.0, tuyệt đối không tự ý lấy đáp án của mã đề đầu tiên.
-   * **Bóc tách câu trả lời ngắn Phần III chuẩn quy chế:** Giữ đúng vị trí từng cột số, tự động phát hiện lỗi tô trùng ô trong 1 cột và lỗi bỏ trống cột ở giữa các chữ số.
-
-3. **Giao diện Desktop hiện đại, Thread-Safe & Hỗ trợ Sửa bài:**
-   * Xây dựng trên **CustomTkinter** với Dark/Light mode hiện đại.
-   * **Luồng chấm nền an toàn (Thread-Safe):** Toàn bộ tiến trình quét, bảng kết quả và thông báo hoàn tất được đồng bộ về luồng chính của Tkinter thông qua cơ chế callback (`after`), đảm bảo giao diện luôn mượt mà, không bị treo đơ.
-   * Màn hình **Review & Sửa lỗi:** Xem ảnh bài làm trực quan với các vòng tròn khoanh màu Xanh lá (đúng), Đỏ (sai), Vàng (đáp án đúng). Cho phép giáo viên sửa nhanh đáp án, mã đề, họ tên và bấm **"Lưu & Chấm lại"**. Khi chấm lại, hệ thống sử dụng ảnh đã căn chỉnh để các vòng tròn khoanh không bao giờ bị lệch vị trí.
-
-4. **Báo cáo Excel chuyên nghiệp 3 Sheet hoàn chỉnh:**
-   * **Sheet 1 (Bang_Diem_Tong_Hop):** SBD, Họ tên (tự động map từ Excel hoặc OCR), Mã đề, Điểm từng phần, Điểm tổng, Xếp loại và Trạng thái bài thi. Các bài lỗi được phân loại riêng, không tính điểm ảo vào lớp.
-   * **Sheet 2 (Chi_Tiet_Bai_Lam):** Ma trận chi tiết lựa chọn của từng thí sinh ở từng câu hỏi.
-   * **Sheet 3 (Thong_Ke_Pho_Diem):**
-     * **I. Chỉ số KPI:** Điểm trung bình, Điểm cao nhất, Điểm thấp nhất, tỷ lệ Giỏi/Khá/TB/Chưa đạt (được tính toán chọn lọc trên các bài thi hợp lệ, không bị kéo tụt bởi bài thi lỗi).
-     * **II. Bảng phổ điểm chi tiết:** Phân bố học sinh theo 10 khoảng điểm từ [0.0 - 1.0) đến [9.0 - 10.0].
-     * **III. Ma trận tỷ lệ đúng / sai theo từng câu hỏi:** Thống kê chi tiết tỷ lệ Đúng, Sai, Bỏ trống của từng câu hỏi và từng phần thi (Phần I, II, III).
+> **Môn học:** Thị giác máy tính (Computer Vision)  
+> **Công nghệ:** Python 3.10+, OpenCV, NumPy, CustomTkinter, OpenPyXL, Pillow.
 
 ---
 
-## 📂 Cấu trúc thư mục Dự án
+## 1. Giới thiệu
+Phần mềm tập trung chuyên sâu vào bài toán **Chấm phiếu trả lời trắc nghiệm THPT 50 câu** với quy trình thao tác chuẩn xác, trực quan gồm 3 bước:
+1. **Bước 1 - Tải phiếu lên:** Tải một hoặc nhiều ảnh phiếu trả lời (JPG, PNG) của học sinh.
+2. **Bước 2 - Đọc phiếu & Chấm điểm:** Thuật toán Thị giác máy tính (OpenCV) tự động nắn phẳng phối cảnh, tự động bóc tách các ô trả lời của 50 câu hỏi, SBD, mã đề và chấm điểm so với đáp án chuẩn. **Không cần nút bấm chức năng tự dò phiếu riêng biệt** vì toàn bộ thuật toán tự dò ma trận ô tròn diễn ra tự động ngầm bên trong.
+3. **Bước 3 - Xuất kết quả:** Hiển thị danh sách điểm số, số câu đúng/sai/trống, xem ảnh phiếu đã khoanh màu trực quan và xuất báo cáo Excel 3 Sheet đầy đủ.
+
+---
+
+## 2. Đáp ứng đầy đủ 5 chức năng của đề bài
+
+### Chức năng 1: Quản lý ảnh phiếu trả lời
+- Cho phép tải lên một hoặc nhiều ảnh cùng lúc (`.jpg`, `.jpeg`, `.png`).
+- Nút nạp nhanh 7 bài làm mẫu thử nghiệm (`HS001` đến `HS007`).
+- Bảng danh sách ảnh hiển thị tên file, độ phân giải ($W \times H$) và trạng thái kiểm tra hợp lệ.
+- Cho phép xóa từng ảnh hoặc xóa toàn bộ danh sách.
+
+### Chức năng 2: Tiền xử lý ảnh (OpenCV Pipeline)
+- **Đọc ảnh UTF-8 an toàn:** Hỗ trợ đầy đủ đường dẫn tiếng Việt có dấu qua `imread_utf8`.
+- **Khử nhiễu & Nhị phân hóa:** Kết hợp Gaussian Blur và Adaptive/Otsu Thresholding.
+- **Phát hiện 4 Marker định vị góc:** Sử dụng Contour Detection và xấp xỉ đa giác (`cv2.approxPolyDP`) để tìm 4 ô vuông đen ở 4 góc phiếu.
+- **Căn chỉnh nắn phẳng (Perspective Transform):** Nắn phẳng ảnh bị nghiêng, xoay hoặc chụp lệch góc từ camera điện thoại về kích thước chuẩn hóa $1200 \times 1700$ px.
+
+### Chức năng 3: Nhận diện đáp án (OMR 50 câu)
+- Thuật toán tự động dò tìm vị trí 200 ô tròn tương ứng với 50 câu hỏi $\times$ 4 lựa chọn (A, B, C, D).
+- Tính mật độ pixel đen (`cv2.countNonZero`) trong circular mask của từng ô tròn.
+- Nhận diện chính xác:
+  - Đáp án được tô hợp lệ.
+  - Câu bỏ trống (`None`).
+  - Câu tô nhiều đáp án / tô trùng (`['A', 'B']`).
+  - Cảnh báo nghi vấn tẩy lem nhem hoặc tô chì quá mờ.
+- Quét Số Báo Danh (6 chữ số) và Mã Đề Thi (3 chữ số).
+
+### Chức năng 4: Xử lý nhiều học sinh theo lô (Batch Processing)
+- Xử lý mượt mà hàng chục/hàng trăm ảnh cùng lúc trên luồng nền (`threading.Thread`) không làm đơ giao diện.
+- Tự động trích xuất mã học sinh từ tên file ảnh (ví dụ: `HS001.jpg` $\rightarrow$ `HS001`).
+- Thanh tiến trình trực quan (`ProgressBar`) hiển thị tỷ lệ % hoàn thành.
+- **Cơ chế chống dừng đột ngột (Fault Tolerance):** Khi gặp 1 ảnh bị lỗi (khuyết góc, mất nét), hệ thống ghi nhận lỗi vào cột trạng thái và tự động tiếp tục xử lý các phiếu còn lại.
+- Bảng thống kê chi tiết: Tổng số, Thành công, Cảnh báo/Cần kiểm tra, Thất bại.
+
+### Chức năng 5: Chấm điểm tự động & Xuất Excel 3 Sheet
+- Tự động so sánh đáp án nhận diện với đáp án chuẩn:
+  - Thang điểm 10.0: Mỗi câu đúng được $+0.2$ điểm.
+  - Phân loại học lực: Xuất sắc ($\ge 9.0$), Giỏi ($\ge 8.0$), Khá ($\ge 6.5$), Trung bình ($\ge 5.0$), Yếu ($< 5.0$).
+- Cung cấp tính năng **Tự dò đáp án chuẩn từ ảnh phiếu mẫu giáo viên** hoặc nhập chuỗi đáp án nhanh.
+- **Xuất file Excel gồm 3 Sheet chuyên nghiệp:**
+  1. `Bang_Diem_Tong_Hop`: Bảng điểm tổng kết, xếp loại, số câu đúng/sai/trống của từng học sinh.
+  2. `Chi_Tiet_Bai_Lam`: Ma trận chi tiết 50 câu trả lời của từng học sinh (Tô xanh câu đúng, tô đỏ câu sai).
+  3. `Thong_Ke_Pho_Diem`: Điểm trung bình, cao nhất, thấp nhất, phổ điểm và tỷ lệ học sinh làm đúng từng câu.
+
+### Giao diện người dùng trực quan & Visualizer
+- Giao diện CustomTkinter hiện đại, dễ thao tác.
+- Xem chi tiết từng bài thi với lớp phủ trực quan OpenCV:
+  - Vòng tròn **XANH LÁ**: Câu làm đúng.
+  - Vòng tròn **ĐỎ** kèm dấu gạch chéo: Câu làm sai hoặc tô trùng.
+  - Vòng tròn **VÀNG**: Đáp án chuẩn của đề thi để đối chiếu.
+  - Banner điểm số nổi bật ở đầu trang phiếu.
+
+---
+
+## 3. Cấu trúc thư mục
 
 ```text
-TGMT_ChamTracNgiem/
+Do An/
 │
-├── core/                              # Các module xử lý lõi (Core algorithms)
-│   ├── cv_utils.py                    # Tiện ích đọc/ghi ảnh tiếng Việt UTF-8 trên Windows
-│   ├── models.py                      # Data models (Exam, Submission, ExamMode)
-│   ├── sheet_generator.py             # Sinh mẫu phiếu PDF/PNG và bộ ảnh test đa dạng
-│   ├── image_alignment.py             # Căn chỉnh phối cảnh 4 marker góc & tách ROI
-│   ├── omr_extractor.py               # Nhận diện OMR SBD, Mã đề, Full MCQ, THPT 3 phần
-│   ├── visualizer.py                  # Vẽ khoanh màu chấm điểm và banner kết quả lên ảnh
-│   ├── grading_engine.py              # Logic chấm điểm chuẩn Bộ GD&ĐT (Full MCQ & THPT 2025)
-│   ├── excel_answer_handler.py        # Import/Export file đáp án Excel/TXT
-│   ├── excel_exporter.py              # Xuất báo cáo kết quả thi 3 Sheet hoàn chỉnh
-│   ├── student_roster_handler.py      # Import danh sách học sinh và tra cứu SBD
-│   ├── ocr_engine.py                  # Nhận diện OCR chữ in/viết tay khung tiêu đề
-│   ├── storage_manager.py             # Quản lý lưu trữ JSON độc lập đường dẫn
-│   └── exam_processor.py              # Cầu nối tích hợp toàn bộ pipeline chấm thi
+├── core/                              # Các thuật toán xử lý cốt lõi (OpenCV & Backend)
+│   ├── cv_utils.py                    # Đọc/ghi ảnh UTF-8 an toàn trên Windows
+│   ├── models.py                      # Data models (Submission, Exam)
+│   ├── image_alignment.py             # Tiền xử lý, phát hiện marker & nắn phẳng phối cảnh
+│   ├── omr_extractor.py               # Thuật toán tự dò ma trận 50 câu & bóc tách OMR
+│   ├── visualizer.py                  # Vẽ overlay kết quả chấm trực quan lên ảnh bài làm
+│   ├── grading_engine.py              # Logic chấm điểm thang 10.0 (0.2đ/câu) & xếp loại
+│   ├── excel_exporter.py              # Xuất báo cáo kết quả thi ra Excel gồm 3 Sheet
+│   ├── sheet_generator.py             # Sinh phiếu trắng, phiếu đáp án mẫu GV & tập ảnh mẫu
+│   └── exam_processor.py              # Pipeline xử lý trọn gói & tự dò đáp án từ ảnh GV
 │
-├── gui/                               # Giao diện người dùng Desktop (CustomTkinter)
-│   └── app.py                         # Ứng dụng Desktop GUI hoàn chỉnh, Thread-Safe
+├── gui/                               # Giao diện người dùng
+│   └── app.py                         # Ứng dụng Desktop CustomTkinter chuyên biệt cho phiếu 50 câu
 │
-├── templates/                         # File mẫu in ấn & file Excel mẫu
-│   ├── phieu_full_40_cau.png          # Mẫu phiếu Full trắc nghiệm 40 câu
-│   ├── phieu_thpt_2025.png            # Mẫu phiếu thi chuẩn THPT 2025
-│   ├── mau_dap_an.xlsx                # Mẫu Excel đáp án Full trắc nghiệm
-│   ├── mau_dap_an_thpt_2025.xlsx      # Mẫu Excel đáp án chuẩn THPT 3 phần
-│   └── mau_danh_sach_hoc_sinh.xlsx    # Mẫu danh sách học sinh lớp
+├── dataset/
+│   └── sample_submissions_50cau/      # 7 bài làm mẫu (10đ, 8đ, bỏ trống, tô trùng, chụp nghiêng...)
 │
-├── dataset/                           # Dữ liệu thử nghiệm phong phú
-│   └── sample_submissions/            # Ảnh bài làm phẳng, chụp nghiêng, thiếu sáng, bóng đổ, mờ, lỗi thực tế
+├── templates/
+│   ├── phieu_50_cau_chuan.png         # Mẫu phiếu thi trắng 50 câu chuẩn
+│   └── phieu_dap_an_mau_giao_vien.png # Phiếu đáp án chuẩn của giáo viên
 │
-├── tests/                             # Bộ kiểm thử tự động (Pytest)
-│   ├── test_grading.py                # Test logic chấm điểm, điểm biên, xử lý mã đề sai, xuất Excel
-│   └── test_omr_and_alignment.py      # Test kiểm tra 4 marker, OMR SBD/Mã đề, phát hiện gap Phần III
+├── tests/
+│   └── test_omr_50_cau.py             # 12 bài unit test bao quát đầy đủ cả 5 chức năng
 │
-├── data/                              # Dữ liệu lưu trữ bài thi và kết quả chấm
-│   ├── exams.json                     # Cấu hình bài kiểm tra đã tạo
-│   └── annotated/                     # Ảnh bài thi sau khi chấm (đã vẽ overlay)
-│
-├── main.py                            # Điểm khởi chạy chính của phần mềm
-├── requirements.txt                   # Danh sách thư viện Python cần thiết
-├── ytuong.txt                         # Bản thuyết minh đề tài
-└── phan_cong_nhiem_vu.txt             # Báo cáo phân công nhiệm vụ chi tiết 4 thành viên
+├── main.py                            # Điểm khởi chạy chương trình
+└── requirements.txt                   # Thư viện yêu cầu
 ```
 
 ---
 
-## 🚀 Hướng dẫn Cài đặt & Chạy Phần mềm
+## 4. Hướng dẫn sử dụng chuẩn 3 bước
 
-### 1. Cài đặt các thư viện cần thiết
-Mở Terminal hoặc Command Prompt tại thư mục dự án và chạy:
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Chạy kiểm thử tự động (Unit Tests)
-Kiểm tra tính toàn vẹn của toàn bộ thuật toán chấm điểm và OMR:
-```bash
-python -m pytest tests/
-```
-
-### 3. Khởi chạy ứng dụng Desktop
-Chạy lệnh:
+### Khởi chạy phần mềm
 ```bash
 python main.py
 ```
 
----
+### Quy trình 3 bước:
+1. **Bước 1: Tải phiếu lên**
+   - Bấm `➕ Tải ảnh phiếu...` để chọn 1 hoặc nhiều ảnh phiếu của học sinh (hoặc bấm `⚡ Nạp 7 bài mẫu` để thử nghiệm nhanh).
+2. **Bước 2: Đọc phiếu & Chấm điểm**
+   - Bấm `▶ ĐỌC PHIẾU & CHẤM ĐIỂM`.
+   - Phần mềm tự động xử lý toàn bộ: nắn phẳng ảnh, tự dò tìm 50 câu hỏi, đọc câu trả lời và chấm điểm so với đáp án chuẩn.
+3. **Bước 3: Xuất kết quả**
+   - Xem kết quả trực tiếp trên bảng (Điểm, Số câu đúng/sai/trống).
+   - Click đúp vào một học sinh để xem ảnh bài làm đã được vẽ khoanh chấm màu (Xanh = Đúng, Đỏ = Sai/Tô trùng).
+   - Bấm `📊 Xuất kết quả (Excel)` để lưu file báo cáo 3 Sheet.
 
-## 📖 Hướng dẫn sử dụng chi tiết
-
-### Bước 1: Chọn hoặc Tạo bài kiểm tra
-* Chọn một bài kiểm tra có sẵn trong danh sách (hệ thống có sẵn bài mẫu **Full Trắc Nghiệm** và **Chuẩn THPT 2025**).
-* Hoặc bấm **"➕ Tạo bài thi mới"**:
-  * Nhập Tên bài thi, Môn, Lớp.
-  * Chọn **Chế độ 1 (Trắc nghiệm 4 lựa chọn)** (chọn 20 hoặc 40 câu) hoặc **Chế độ 2 (Chuẩn THPT 2025)**.
-  * Nhập chuỗi đáp án nhanh hoặc bấm **"📥 Import từ Excel"**.
-  * (Tùy chọn) Bấm **"📥 Nạp Danh sách học sinh"** để phần mềm tự động gán tên học sinh theo SBD.
-
-### Bước 2: Quét & Chấm bài thi
-* Chuyển sang màn hình **"📸 Quét & Chấm bài"**.
-* Bấm **"🖼️ Chọn ảnh bài làm"** hoặc **"📁 Chọn thư mục ảnh"** (có thể chọn thư mục `dataset/sample_submissions` có sẵn).
-* Bấm **"🚀 BẮT ĐẦU CHẤM TẤT CẢ"**. Hệ thống sẽ tự động:
-  * Nắn thẳng từng ảnh chụp qua 4 marker định vị góc.
-  * Nhận diện SBD, Mã đề và đáp án.
-  * Đối chiếu đáp án, tính điểm từng phần và vẽ kết quả lên ảnh.
-
-### Bước 3: Xem chi tiết & Sửa bài nghi vấn
-* Trên bảng kết quả, bấm nút **"🔍 Xem & Sửa"** ở bất kỳ bài làm nào.
-* Quan sát ảnh bài làm đã được vẽ khoanh **Xanh lá** (đúng), **Đỏ** (sai), **Vàng** (đáp án đúng của đề).
-* Nếu có câu bị cờ cảnh báo *"Cần kiểm tra"* (học sinh tẩy chì chưa sạch hoặc mã đề sai), giáo viên có thể sửa lại và bấm **"💾 LƯU & CHẤM LẠI BÀI NÀY"**. Ảnh overlay sẽ được vẽ lại chính xác trên tọa độ ảnh đã căn chỉnh.
-
-### Bước 4: Thống kê & Xuất Excel
-* Bấm sang màn hình **"📊 Thống kê & Xuất Excel"**.
-* Xem các chỉ số KPI: Điểm trung bình, Điểm cao nhất, Điểm thấp nhất, Tỷ lệ giỏi/khá/trung bình/chưa đạt (đã tự động loại trừ bài lỗi).
-* Bấm **"📊 XUẤT BÁO CÁO EXCEL 3 SHEET HOÀN CHỈNH"** để lưu file Excel báo cáo về máy.
-
----
-
-## ⚠️ Giới hạn hiện tại & Lưu ý sử dụng
-* **Mẫu phiếu:** Sử dụng 2 mẫu phiếu chuẩn A4 trong thư mục `templates/` (có 4 ô vuông đen to ở 4 góc để định vị).
-* **Chất lượng ảnh:** Khi chụp ảnh bằng điện thoại, đảm bảo nhìn thấy rõ toàn bộ 4 marker ở 4 góc tờ giấy. Không để ngón tay che khuất các marker góc.
-* **Bút chì:** Khuyến khích học sinh dùng bút chì 2B hoặc đậm hơn để tô ô tròn kín và rõ ràng.
+### 4. Chạy kiểm thử tự động (Unit Tests)
+```bash
+python tests/test_omr_50_cau.py
+```
+Toàn bộ 12 test case tương ứng với 5 chức năng đều đạt trạng thái `OK (100% Passed)`.

@@ -6,7 +6,7 @@ Phụ trách: Quản lý lưu trữ thông tin Bài kiểm tra và Bài làm (d�
 import os
 import json
 from typing import List, Optional, Dict
-from core.models import Exam, Submission, ExamMode
+from core.models import Exam, Submission
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

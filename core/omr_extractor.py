@@ -1,43 +1,42 @@
 """
 Module: omr_extractor.py
-Phụ trách: Thành viên 2 (Computer Vision 2)
-Chức năng:
-  - Bóc tách SBD (6 số) và Mã đề thi (3 số)
-  - Nhận diện đáp án Chế độ 1: Full trắc nghiệm 4 lựa chọn (A, B, C, D)
-  - Nhận diện đáp án Chế độ 2: Đề chuẩn THPT 2025 (Phần I, II, III)
-  - Thuật toán so sánh tương đối (Relative Scoring) chống sai số do ánh sáng/tẩy chì
+Chức năng cốt lõi: TỰ ĐỘNG DÒ TÌM MẪU VÀ BÓC TÁCH ĐÁP ÁN PHIẾU 50 CÂU (OMR)
+Đặc điểm:
+  - Tự động dò tìm vị trí 50 câu hỏi trên ảnh phiếu (Dynamic Bubble Grid Detection)
+  - Thích ứng tự động với cả mẫu 2 cột (2x25) và mẫu 4 cột (chuẩn Bộ GD&ĐT)
+  - Phân tích mật độ pixel đen từng ô A, B, C, D
+  - Phát hiện câu bỏ trống, câu tô nhiều đáp án, cảnh báo tẩy lem nhem
+  - Quét SBD (6 số) và Mã đề (3 số)
 """
 
 import os
 import sys
+import cv2
+import numpy as np
+from typing import Dict, Tuple, Any, Optional, List
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import cv2
-import numpy as np
-from typing import Dict, Tuple, Any, Optional, List
-from core.models import ExamMode
+OPTIONS = ['A', 'B', 'C', 'D']
 
 
-def get_bubble_density(gray_img: np.ndarray, cx: int, cy: int, radius: int = 12) -> float:
+def get_bubble_density(gray_img: np.ndarray, cx: int, cy: int, radius: int = 11) -> float:
     """
-    Tính mật độ pixel được tô (đen) trong vùng tròn tâm (cx, cy) bán kính radius.
-    Trả về tỷ lệ từ 0.0 (hoàn toàn trắng) đến 1.0 (hoàn toàn đen).
+    Tính tỷ lệ pixel được tô đen trong vùng tròn tâm (cx, cy) bán kính radius.
+    Trả về tỷ lệ từ 0.0 (trắng hoàn toàn) đến 1.0 (đen hoàn toàn).
     """
     h, w = gray_img.shape[:2]
     x1, x2 = max(0, int(cx - radius)), min(w, int(cx + radius + 1))
     y1, y2 = max(0, int(cy - radius)), min(h, int(cy + radius + 1))
-    
+
     roi = gray_img[y1:y2, x1:x2]
     if roi.size == 0:
         return 0.0
 
-    # Nhị phân hóa cục bộ
     _, thresh = cv2.threshold(roi, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    
-    # Tạo circular mask
+
     mask = np.zeros(roi.shape, dtype=np.uint8)
     cv2.circle(mask, (int(cx - x1), int(cy - y1)), int(radius * 0.85), 255, -1)
 
@@ -46,25 +45,124 @@ def get_bubble_density(gray_img: np.ndarray, cx: int, cy: int, radius: int = 12)
     if total_mask_pixels == 0:
         return 0.0
 
-    filled_pixels = cv2.countNonZero(masked_pixels)
-    return float(filled_pixels) / float(total_mask_pixels)
+    return float(cv2.countNonZero(masked_pixels)) / float(total_mask_pixels)
+
+
+def get_default_50_coords(q_num: int) -> Tuple[int, List[int]]:
+    """Tọa độ chuẩn dự phòng (Fallback) cho mẫu 50 câu 2 cột"""
+    if q_num <= 25:
+        base_x = 110
+        q_row = q_num - 1
+    else:
+        base_x = 640
+        q_row = q_num - 26
+
+    cy = 585 + q_row * 39
+    cx_list = [base_x + 130 + o * 75 for o in range(4)]
+    return cy, cx_list
+
+
+def detect_bubbles_50_questions(gray_img: np.ndarray) -> Dict[int, Tuple[int, List[int]]]:
+    """
+    THUẬT TOÁN TỰ ĐỘNG DÒ TÌM MA TRẬN 50 CÂU HỎI TRẮC NGHIỆM:
+      1. Quét contour trong vùng bài làm (Y từ 510 đến 1620)
+      2. Lọc các contour có diện tích và độ tròn Circularity đặc trưng ô OMR
+      3. Gom nhóm theo hàng ngang Y (cùng cao độ)
+      4. Tách các cụm 4 ô (A, B, C, D) và phân nhóm theo cột dọc từ trái sang phải
+    Tự động thích ứng với cả mẫu 50 câu 2 cột lẫn mẫu 50 câu 4 cột!
+    """
+    h_img, w_img = gray_img.shape[:2]
+    roi = gray_img[510:1620, :]
+    
+    thresh = cv2.adaptiveThreshold(
+        cv2.GaussianBlur(roi, (5, 5), 0), 255, 
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25, 7
+    )
+    contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+    candidates = []
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if 160 <= area <= 2500:
+            peri = cv2.arcLength(cnt, True)
+            if peri > 0:
+                circ = 4 * np.pi * area / (peri * peri)
+                if 0.50 <= circ <= 1.50:
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    if 0.60 <= (w / h) <= 1.50 and w >= 15 and h >= 15:
+                        candidates.append((x + w // 2, 510 + y + h // 2))
+
+    # Khử trùng lặp
+    unique_bubbles = []
+    for cx, cy in candidates:
+        if not any((cx - ux)**2 + (cy - uy)**2 < 64 for ux, uy in unique_bubbles):
+            unique_bubbles.append((cx, cy))
+
+    if len(unique_bubbles) < 100:
+        # Nếu ảnh mờ hoặc không quét đủ ô tròn, dùng tọa độ chuẩn dự phòng
+        return {q: get_default_50_coords(q) for q in range(1, 51)}
+
+    # Gom nhóm theo hàng Y
+    unique_bubbles.sort(key=lambda b: b[1])
+    y_bands = []
+    cur_band = [unique_bubbles[0]]
+    for b in unique_bubbles[1:]:
+        if abs(b[1] - cur_band[-1][1]) < 15:
+            cur_band.append(b)
+        else:
+            y_bands.append(cur_band)
+            cur_band = [b]
+    y_bands.append(cur_band)
+
+    col_questions = {}
+    for band in y_bands:
+        band.sort(key=lambda b: b[0])
+        quartets = []
+        cur_q = [band[0]]
+        for b in band[1:]:
+            if b[0] - cur_q[-1][0] > 110 or len(cur_q) == 4:
+                if len(cur_q) == 4:
+                    quartets.append(cur_q)
+                cur_q = [b]
+            else:
+                cur_q.append(b)
+        if len(cur_q) == 4:
+            quartets.append(cur_q)
+
+        for q in quartets:
+            cx_center = sum(b[0] for b in q) / 4
+            cy_avg = int(sum(b[1] for b in q) / 4)
+            cx_list = [b[0] for b in q]
+            col_id = int(cx_center // 200)
+            if col_id not in col_questions:
+                col_questions[col_id] = []
+            col_questions[col_id].append((cy_avg, cx_list))
+
+    final_questions = {}
+    q_counter = 1
+    for col_id in sorted(col_questions.keys()):
+        rows = sorted(col_questions[col_id], key=lambda r: r[0])
+        for r in rows:
+            final_questions[q_counter] = r
+            q_counter += 1
+
+    # Nếu dò được đủ 50 câu -> dùng kết quả dò tự động
+    if len(final_questions) >= 48:
+        return final_questions
+
+    # Nếu dò thiếu câu (do ảnh chụp lệch/nhiễu), fallback về tọa độ chuẩn
+    return {q: get_default_50_coords(q) for q in range(1, 51)}
 
 
 def extract_sbd(gray_img: np.ndarray) -> Tuple[str, bool, float]:
-    """
-    Quét khối Số Báo Danh (6 cột x 10 hàng 0-9)
-    Tâm các ô: cx = 160 + col * 65, cy = 200 + row * 25
-    Trả về: (sbd_string, is_valid: bool, min_confidence: float)
-    Nếu cột không được tô hoặc tô không rõ ràng, không tự gán số mặc định ('0')
-    mà đánh dấu '?' để cảnh báo người dùng xác nhận.
-    """
+    """Quét khối Số Báo Danh (6 cột x 10 hàng 0-9)"""
     sbd_digits = []
     min_confidence = 1.0
     is_valid = True
 
     for col in range(6):
-        cx = 160 + col * 65
-        densities = [get_bubble_density(gray_img, cx, 200 + r * 25, radius=8) for r in range(10)]
+        cx = 155 + col * 65
+        densities = [get_bubble_density(gray_img, cx, 245 + r * 20, radius=7) for r in range(10)]
         max_idx = int(np.argmax(densities))
         max_val = densities[max_idx]
 
@@ -73,34 +171,30 @@ def extract_sbd(gray_img: np.ndarray) -> Tuple[str, bool, float]:
         min_confidence = min(min_confidence, conf)
 
         if max_val < 0.22:
-            # Cột bị bỏ trống hoặc tô quá mờ
-            sbd_digits.append("?")
+            sbd_digits.append("")
             is_valid = False
         elif sorted_d[1] >= 0.22 and conf < 0.12:
-            # Nghi vấn tô 2 ô cùng 1 cột hoặc tẩy lem
             sbd_digits.append("?")
             is_valid = False
         else:
             sbd_digits.append(str(max_idx))
 
-    return "".join(sbd_digits), is_valid, min_confidence
+    res_str = "".join([d if d else "?" for d in sbd_digits])
+    if all(d == "" for d in sbd_digits):
+        return "", False, 0.0
+
+    return res_str, is_valid, min_confidence
 
 
 def extract_exam_code(gray_img: np.ndarray) -> Tuple[str, bool, float]:
-    """
-    Quét khối Mã Đề Thi (3 cột x 10 hàng 0-9)
-    Tâm các ô: cx = 680 + col * 65, cy = 200 + row * 25
-    Trả về: (code_string, is_valid: bool, min_confidence: float)
-    Nếu không đọc được hoặc nghi vấn, không tự gán số mặc định ('100')
-    mà trả về '?' và is_valid = False để cảnh báo người dùng xác nhận.
-    """
+    """Quét khối Mã Đề Thi (3 cột x 10 hàng 0-9)"""
     code_digits = []
     min_confidence = 1.0
     is_valid = True
 
     for col in range(3):
-        cx = 680 + col * 65
-        densities = [get_bubble_density(gray_img, cx, 200 + r * 25, radius=8) for r in range(10)]
+        cx = 605 + col * 65
+        densities = [get_bubble_density(gray_img, cx, 245 + r * 20, radius=7) for r in range(10)]
         max_idx = int(np.argmax(densities))
         max_val = densities[max_idx]
 
@@ -109,7 +203,7 @@ def extract_exam_code(gray_img: np.ndarray) -> Tuple[str, bool, float]:
         min_confidence = min(min_confidence, conf)
 
         if max_val < 0.22:
-            code_digits.append("?")
+            code_digits.append("")
             is_valid = False
         elif sorted_d[1] >= 0.22 and conf < 0.12:
             code_digits.append("?")
@@ -117,223 +211,93 @@ def extract_exam_code(gray_img: np.ndarray) -> Tuple[str, bool, float]:
         else:
             code_digits.append(str(max_idx))
 
-    return "".join(code_digits), is_valid, min_confidence
+    res_str = "".join([d if d else "?" for d in code_digits])
+    if all(d == "" for d in code_digits):
+        return "", False, 0.0
+
+    return res_str, is_valid, min_confidence
 
 
-def extract_full_mcq_answers(gray_img: np.ndarray, num_questions: int = 40) -> Tuple[Dict[int, Any], bool]:
+def extract_all_data(aligned_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Nhận diện đáp án Chế độ 1: 40 câu trắc nghiệm (A, B, C, D)
-    Trả về: (answers_dict, needs_review: bool)
-    """
-    answers = {}
-    options = ['A', 'B', 'C', 'D']
-    needs_review = False
-
-    for q_idx in range(num_questions):
-        q_num = q_idx + 1
-        if q_num <= 20:
-            base_x = 120
-            q_row = q_num - 1
-        else:
-            base_x = 640
-            q_row = q_num - 21
-
-        cy = 600 + q_row * 48
-        densities = [get_bubble_density(gray_img, base_x + 125 + o * 75, cy, radius=12) for o in range(4)]
-        
-        sorted_d = sorted(densities, reverse=True)
-        d_max1 = sorted_d[0]
-        d_max2 = sorted_d[1]
-        best_opt = options[int(np.argmax(densities))]
-
-        # Ngưỡng phát hiện
-        if d_max1 < 0.22:
-            # Chưa tô ô nào
-            answers[q_num] = None
-        elif d_max2 > 0.25 and (d_max1 - d_max2) < 0.12:
-            # Nghi vấn tô 2 ô hoặc tẩy lem nhem
-            needs_review = True
-            marked = [options[i] for i in range(4) if densities[i] >= 0.22]
-            answers[q_num] = marked if len(marked) > 1 else best_opt
-        else:
-            answers[q_num] = best_opt
-
-    return answers, needs_review
-
-
-def extract_thpt_2025_answers(gray_img: np.ndarray) -> Tuple[Dict[str, Any], bool]:
-    """
-    Nhận diện đáp án Chế độ 2: Đề chuẩn THPT mới (Phần I, Phần II, Phần III)
-    Trả về: (data_dict, needs_review: bool)
-    """
-    needs_review = False
-    options = ['A', 'B', 'C', 'D']
-
-    # -------------------------------------------------------------
-    # 1. Nhận diện PHẦN I (12 câu 4 lựa chọn)
-    # -------------------------------------------------------------
-    part1 = {}
-    for q_idx in range(12):
-        q_num = q_idx + 1
-        c_i = 0 if q_num <= 6 else 1
-        bx = 140 if c_i == 0 else 640
-        q_pos = (q_num - 1) if c_i == 0 else (q_num - 7)
-        cy = 550 + q_pos * 40
-
-        densities = [get_bubble_density(gray_img, bx + 130 + o * 70, cy, radius=11) for o in range(4)]
-        sorted_d = sorted(densities, reverse=True)
-        if sorted_d[0] < 0.22:
-            part1[q_num] = None
-        elif sorted_d[1] > 0.25 and (sorted_d[0] - sorted_d[1]) < 0.12:
-            needs_review = True
-            part1[q_num] = [options[i] for i in range(4) if densities[i] >= 0.22]
-        else:
-            part1[q_num] = options[int(np.argmax(densities))]
-
-    # -------------------------------------------------------------
-    # 2. Nhận diện PHẦN II (4 câu Đúng/Sai x 4 ý a,b,c,d)
-    # -------------------------------------------------------------
-    part2 = {}
-    for q_idx in range(4):
-        q_num = q_idx + 1
-        bx = 130 if (q_idx % 2 == 0) else 640
-        by = 880 if (q_idx < 2) else 1030
-        part2[q_num] = {}
-
-        for s_idx, sub in enumerate(['a', 'b', 'c', 'd']):
-            sy = by + 10 + s_idx * 30
-            d_d = get_bubble_density(gray_img, bx + 180, sy, radius=10) # Ô Đúng [D]
-            d_s = get_bubble_density(gray_img, bx + 230, sy, radius=10) # Ô Sai [S]
-
-            if max(d_d, d_s) < 0.20:
-                part2[q_num][sub] = None
-            elif abs(d_d - d_s) < 0.10 and min(d_d, d_s) > 0.20:
-                needs_review = True
-                part2[q_num][sub] = "Đ" if d_d > d_s else "S"
-            else:
-                part2[q_num][sub] = "Đ" if d_d > d_s else "S"
-
-    # -------------------------------------------------------------
-    # 3. Nhận diện PHẦN III (6 câu Trả lời ngắn - Bảng tô số 4 cột)
-    # -------------------------------------------------------------
-    part3 = {}
-    for q_idx in range(6):
-        q_num = q_idx + 1
-        col_pos = q_idx % 3
-        row_pos = q_idx // 3
-        bx = 120 + col_pos * 340
-        by = 1260 + row_pos * 160
-
-        # Quét dấu '-' ở cột 0 và dấu ',' ở cột 1
-        d_minus = get_bubble_density(gray_img, bx + 95, by + 16, radius=5)
-        d_comma = get_bubble_density(gray_img, bx + 95 + 48, by + 16, radius=5)
-        is_neg = (d_minus >= 0.40)
-        has_comma = (d_comma >= 0.40)
-
-        # Quét độc lập từng cột số 0, 1, 2, 3
-        col_digits = [None, None, None, None]
-        for c in range(4):
-            cx = bx + 95 + c * 48
-            col_densities = [get_bubble_density(gray_img, cx, by + 32 + d * 12, radius=5) for d in range(10)]
-            sorted_d = sorted(col_densities, reverse=True)
-            max_val = sorted_d[0]
-            sec_val = sorted_d[1]
-            best_d = int(col_densities.index(max_val))
-
-            if max_val < 0.22:
-                # Cột này để trống
-                col_digits[c] = None
-            elif sec_val >= 0.30 and (max_val - sec_val) < 0.15:
-                # Tô trùng nhiều ô hoặc tẩy lem nhem trong cùng 1 cột
-                needs_review = True
-                col_digits[c] = "?"
-            elif max_val >= 0.45 and (max_val - sec_val) >= 0.15:
-                col_digits[c] = str(best_d)
-            elif max_val >= 0.25:
-                # Ô tô hơi mờ hoặc nghi vấn
-                needs_review = True
-                col_digits[c] = str(best_d)
-            else:
-                col_digits[c] = None
-
-        # Kiểm tra xem cả câu có tô ô nào không
-        filled_indices = [i for i, v in enumerate(col_digits) if v is not None]
-
-        if not filled_indices and not is_neg and not has_comma:
-            # Học sinh bỏ trống toàn bộ câu này
-            part3[q_num] = ""
-        else:
-            # Kiểm tra lỗi: Có cột bị bỏ trống xen kẽ ở giữa không (ví dụ ['1', None, '5'])
-            prefix = "-" if is_neg else ""
-            if filled_indices:
-                min_i = min(filled_indices)
-                max_i = max(filled_indices)
-                has_gap = any(col_digits[i] is None for i in range(min_i, max_i + 1))
-                if has_gap:
-                    # Báo cờ cần kiểm tra do bỏ trống cột ở giữa các chữ số
-                    needs_review = True
-
-                digits_list = [col_digits[i] if col_digits[i] is not None else "?" for i in range(min_i, max_i + 1)]
-                if has_comma:
-                    if len(digits_list) == 1:
-                        val_res = prefix + digits_list[0]
-                    else:
-                        val_res = prefix + digits_list[0] + "." + "".join(digits_list[1:])
-                else:
-                    val_res = prefix + "".join(digits_list)
-                part3[q_num] = val_res
-            else:
-                # Chỉ tô dấu '-' hoặc ',' mà không tô số
-                needs_review = True
-                part3[q_num] = prefix + ("." if has_comma else "?")
-
-    result_data = {
-        "part1": part1,
-        "part2": part2,
-        "part3": part3
-    }
-    return result_data, needs_review
-
-
-def extract_all_data(
-    aligned_bgr: np.ndarray, 
-    mode: str = ExamMode.FULL_MCQ,
-    num_questions: int = 40
-) -> Dict[str, Any]:
-    """
-    Hàm tổng hợp trích xuất toàn bộ thông tin từ ảnh phiếu đã căn chỉnh.
-    Tự động kiểm tra tính hợp lệ của SBD, Mã đề và cấu trúc đáp án.
+    Hàm tự động dò tìm vị trí và bóc tách đáp án 50 câu:
+      - Tự dò tọa độ 50 câu trên tờ phiếu
+      - Tính mật độ pixel từng ô A, B, C, D
+      - Nhận diện câu được tô, câu bỏ trống, câu tô trùng
+      - Nhận diện SBD và Mã đề thi
     """
     gray = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2GRAY) if len(aligned_bgr.shape) == 3 else aligned_bgr
 
-    sbd, is_valid_sbd, conf_sbd = extract_sbd(gray)
-    code, is_valid_code, conf_code = extract_exam_code(gray)
+    # 1. Tự động dò tìm tọa độ 50 câu
+    coords_map = detect_bubbles_50_questions(gray)
+
+    answers = {}
+    warnings = []
+    needs_rev = False
+    radius = 11
+    threshold_filled = 0.30
+
+    for q_num in range(1, 51):
+        if q_num not in coords_map:
+            answers[q_num] = None
+            continue
+
+        cy, cx_list = coords_map[q_num]
+        densities = [get_bubble_density(gray, cx, cy, radius=radius) for cx in cx_list]
+
+        sorted_d = sorted(densities, reverse=True)
+        max_val = sorted_d[0]
+        second_val = sorted_d[1]
+        best_opt = OPTIONS[int(np.argmax(densities))]
+
+        marked_opts = [OPTIONS[i] for i in range(4) if densities[i] >= threshold_filled]
+
+        # Bỏ trống
+        if max_val < 0.25:
+            answers[q_num] = None
+        # Tô nhiều đáp án
+        elif len(marked_opts) > 1 and (max_val - second_val) < 0.20:
+            answers[q_num] = marked_opts
+            needs_rev = True
+            warnings.append(f"Câu {q_num}: Tô {len(marked_opts)} đáp án ({', '.join(marked_opts)})")
+        # Tô 1 đáp án
+        else:
+            answers[q_num] = best_opt
+            if second_val >= 0.25 and (max_val - second_val) < 0.15:
+                needs_rev = True
+                warnings.append(f"Câu {q_num}: Nghi vấn tẩy lem nhem")
+            elif max_val < 0.35:
+                needs_rev = True
+                warnings.append(f"Câu {q_num}: Tô mờ")
+
+    # 2. Quét SBD & Mã đề
+    sbd, is_valid_sbd, _ = extract_sbd(gray)
+    code, is_valid_code, _ = extract_exam_code(gray)
 
     header_warnings = []
-    if not is_valid_sbd or "?" in sbd:
-        header_warnings.append(f"SBD chưa rõ hoặc nghi vấn: '{sbd}'")
-    if not is_valid_code or "?" in code:
-        header_warnings.append(f"Mã đề chưa rõ hoặc nghi vấn: '{code}'")
+    if sbd and ("?" in sbd or not is_valid_sbd):
+        header_warnings.append(f"SBD chưa rõ: '{sbd}'")
+        needs_rev = True
+    if code and ("?" in code or not is_valid_code):
+        header_warnings.append(f"Mã đề chưa rõ: '{code}'")
+        needs_rev = True
 
-    needs_review_header = (not is_valid_sbd) or (not is_valid_code) or (conf_sbd < 0.15) or (conf_code < 0.15)
+    all_warnings = header_warnings + warnings
 
-    if mode == ExamMode.FULL_MCQ:
-        answers, needs_rev = extract_full_mcq_answers(gray, num_questions=num_questions)
-        return {
-            "sbd": sbd,
-            "is_valid_sbd": is_valid_sbd,
-            "exam_code": code,
-            "is_valid_code": is_valid_code,
-            "header_warning": "; ".join(header_warnings),
-            "answers": answers,
-            "needs_review": needs_rev or needs_review_header
-        }
-    else:
-        thpt_data, needs_rev = extract_thpt_2025_answers(gray)
-        thpt_data["sbd"] = sbd
-        thpt_data["is_valid_sbd"] = is_valid_sbd
-        thpt_data["exam_code"] = code
-        thpt_data["is_valid_code"] = is_valid_code
-        thpt_data["header_warning"] = "; ".join(header_warnings)
-        thpt_data["needs_review"] = needs_rev or needs_review_header
-        return thpt_data
+    return {
+        "num_questions": 50,
+        "coords_map": coords_map,
+        "sbd": sbd,
+        "is_valid_sbd": is_valid_sbd,
+        "exam_code": code,
+        "is_valid_code": is_valid_code,
+        "answers": answers,
+        "needs_review": needs_rev,
+        "warnings": all_warnings,
+        "warning_message": "; ".join(all_warnings[:3]) if all_warnings else ""
+    }
+
+
+def get_question_coords(q_num: int) -> Tuple[int, List[int]]:
+    """Tọa độ câu hỏi 50 câu chuẩn"""
+    return get_default_50_coords(q_num)

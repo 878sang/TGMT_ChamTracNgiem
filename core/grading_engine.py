@@ -1,195 +1,113 @@
 """
 Module: grading_engine.py
-Phụ trách: Cài đặt logic chấm điểm cho cả 2 Chế độ:
-  - Chế độ 1: Full trắc nghiệm 4 lựa chọn (chia đều điểm)
-  - Chế độ 2: Đề chuẩn Tốt nghiệp THPT mới BGD&ĐT (3 Phần: P1 0.25đ/câu, P2 lũy tiến, P3 0.5đ/câu)
+Chức năng 5: Chấm điểm tự động linh hoạt theo số lượng câu hỏi (20, 40, 50 câu).
+- Thang điểm 10.0 (Mỗi câu = 10.0 / total_questions)
+- So sánh chi tiết từng câu: Đúng, Sai, Bỏ trống, Tô trùng
+- Xếp loại học lực
+- Phân tích chuỗi đáp án nhập nhanh và tạo đáp án mẫu theo số câu
 """
 
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
+import re
 
 
-def grade_full_mcq(
-    student_answers: Dict[Any, Any], 
-    answer_key: Dict[Any, Any], 
-    max_score: float = 10.0
+def grade_submission(
+    student_answers: Dict[int, Any], 
+    answer_key: Dict[int, str], 
+    max_score: float = 10.0,
+    total_questions: Optional[int] = None
 ) -> Dict[str, Any]:
     """
-    Chấm điểm Chế độ 1: Full trắc nghiệm 4 lựa chọn (A, B, C, D)
+    So sánh đáp án của học sinh với đáp án chuẩn.
+    Hỗ trợ linh hoạt số câu hỏi (20, 40, 50 câu).
     """
-    total_questions = len(answer_key) if answer_key else 40
-    if total_questions == 0:
-        total_questions = 40
-
+    num_q = total_questions or len(answer_key) or 50
     correct_count = 0
     wrong_count = 0
     blank_count = 0
+    multiple_count = 0
     details = {}
 
-    for q_num, correct_ans in answer_key.items():
-        q_key = int(q_num) if str(q_num).isdigit() else q_num
-        st_ans = student_answers.get(q_key) or student_answers.get(str(q_key))
-        
-        # Chuẩn hóa
-        correct_ans_str = str(correct_ans).strip().upper() if correct_ans else ""
-        st_ans_str = str(st_ans).strip().upper() if st_ans else ""
+    for q_num in range(1, num_q + 1):
+        correct_ans = str(answer_key.get(q_num, "")).strip().upper()
+        st_ans = student_answers.get(q_num)
 
-        if not st_ans_str:
+        # 1. Bỏ trống
+        if st_ans is None or st_ans == "":
             blank_count += 1
             is_correct = False
-        elif st_ans_str == correct_ans_str:
-            correct_count += 1
-            is_correct = True
-        else:
+            disp_st = "Trống"
+
+        # 2. Tô nhiều ô
+        elif isinstance(st_ans, (list, tuple)):
+            multiple_count += 1
             wrong_count += 1
             is_correct = False
+            disp_st = ",".join(st_ans)
 
-        details[q_key] = {
-            "student": st_ans_str,
-            "key": correct_ans_str,
+        # 3. Tô 1 ô
+        else:
+            disp_st = str(st_ans).strip().upper()
+            if disp_st == correct_ans and correct_ans:
+                correct_count += 1
+                is_correct = True
+            else:
+                wrong_count += 1
+                is_correct = False
+
+        details[q_num] = {
+            "student": disp_st,
+            "key": correct_ans,
             "is_correct": is_correct
         }
 
-    score = round((correct_count / total_questions) * max_score, 2)
+    # Tính điểm: (số câu đúng / tổng số câu) * 10.0
+    score = round((correct_count / max(num_q, 1)) * max_score, 2)
+
+    # Xếp loại học lực
+    if score >= 8.0:
+        rank = "Giỏi"
+    elif score >= 6.5:
+        rank = "Khá"
+    elif score >= 5.0:
+        rank = "Trung bình"
+    else:
+        rank = "Yếu"
 
     return {
         "score": score,
         "correct_count": correct_count,
         "wrong_count": wrong_count,
         "blank_count": blank_count,
-        "total_questions": total_questions,
-        "details": details
+        "multiple_count": multiple_count,
+        "total_questions": num_q,
+        "details": details,
+        "rank": rank
     }
 
 
-def normalize_numeric_string(val_str: Any) -> str:
-    """
-    Chuẩn hóa chuỗi số học để so khớp Phần III (ví dụ: '1,5' -> '1.5', '015' -> '15')
-    """
-    if val_str is None:
-        return ""
-    s = str(val_str).strip().replace(',', '.')
-    try:
-        f = float(s)
-        # Nếu là số nguyên (ví dụ 15.0) -> '15'
-        if f.is_integer():
-            return str(int(f))
-        return str(f)
-    except ValueError:
-        return s
+def parse_answer_string(text: str, max_q: int = 50) -> Dict[int, str]:
+    """Chuyển đổi chuỗi đáp án người dùng nhập sang dictionary {1: 'A', 2: 'B', ...}"""
+    clean_text = text.strip()
+    result = {}
+
+    # Định dạng "1:A" hoặc "1A"
+    indexed_matches = re.findall(r'(\d+)\s*[:\.\-]?\s*([A-Da-d])', clean_text)
+    if indexed_matches and len(indexed_matches) >= 3:
+        for num_str, opt in indexed_matches:
+            q_num = int(num_str)
+            if 1 <= q_num <= max_q:
+                result[q_num] = opt.upper()
+        return result
+
+    # Định dạng chuỗi liên tiếp hoặc cách nhau: "ABCD..." hoặc "A B C D..."
+    letters = re.findall(r'[A-Da-d]', clean_text)
+    for idx, letter in enumerate(letters[:max_q]):
+        result[idx + 1] = letter.upper()
+
+    return result
 
 
-def grade_thpt_2025(
-    student_data: Dict[str, Any], 
-    answer_key: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Chấm điểm Chế độ 2: Đề chuẩn Tốt nghiệp THPT mới của Bộ GD&ĐT (3 Phần)
-    - student_data: {"part1": {...}, "part2": {...}, "part3": {...}}
-    - answer_key:   {"part1": {...}, "part2": {...}, "part3": {...}}
-    """
-    # -------------------------------------------------------------
-    # 1. Chấm PHẦN I (12 câu - mỗi câu 0.25đ, tối đa 3.0đ)
-    # -------------------------------------------------------------
-    key_p1 = answer_key.get("part1", {})
-    st_p1 = student_data.get("part1", {})
-    p1_correct = 0
-    p1_details = {}
-
-    for q_num, correct_ans in key_p1.items():
-        q_key = int(q_num) if str(q_num).isdigit() else q_num
-        st_ans = st_p1.get(q_key) or st_p1.get(str(q_key))
-        c_str = str(correct_ans).strip().upper() if correct_ans else ""
-        s_str = str(st_ans).strip().upper() if st_ans else ""
-
-        is_c = (s_str == c_str and bool(s_str))
-        if is_c:
-            p1_correct += 1
-
-        p1_details[q_key] = {"student": s_str, "key": c_str, "is_correct": is_c}
-
-    score_p1 = round(p1_correct * 0.25, 2)
-
-    # -------------------------------------------------------------
-    # 2. Chấm PHẦN II (4 câu - Quy chế tính điểm lũy tiến, tối đa 4.0đ)
-    #    1 ý đúng: 0.1đ | 2 ý đúng: 0.25đ | 3 ý đúng: 0.5đ | 4 ý đúng: 1.0đ
-    # -------------------------------------------------------------
-    key_p2 = answer_key.get("part2", {})
-    st_p2 = student_data.get("part2", {})
-    score_p2 = 0.0
-    p2_details = {}
-
-    progression_table = {
-        0: 0.0,
-        1: 0.1,
-        2: 0.25,
-        3: 0.5,
-        4: 1.0
-    }
-
-    for q_num, key_subs in key_p2.items():
-        q_key = int(q_num) if str(q_num).isdigit() else q_num
-        st_subs = st_p2.get(q_key) or st_p2.get(str(q_key)) or {}
-
-        correct_sub_count = 0
-        sub_details = {}
-
-        for sub in ['a', 'b', 'c', 'd']:
-            k_val = str(key_subs.get(sub, "")).strip().upper()
-            s_val = str(st_subs.get(sub, "")).strip().upper()
-
-            # Chuẩn hóa Đ/S
-            k_std = "Đ" if k_val in {"Đ", "D", "T"} else ("S" if k_val in {"S", "F"} else "")
-            s_std = "Đ" if s_val in {"Đ", "D", "T"} else ("S" if s_val in {"S", "F"} else "")
-
-            is_sub_c = (k_std == s_std and bool(s_std))
-            if is_sub_c:
-                correct_sub_count += 1
-
-            sub_details[sub] = {"student": s_std, "key": k_std, "is_correct": is_sub_c}
-
-        q_score = progression_table.get(correct_sub_count, 0.0)
-        score_p2 += q_score
-        p2_details[q_key] = {
-            "correct_subs": correct_sub_count,
-            "score": q_score,
-            "sub_items": sub_details
-        }
-
-    score_p2 = round(score_p2, 2)
-
-    # -------------------------------------------------------------
-    # 3. Chấm PHẦN III (6 câu - mỗi câu 0.5đ, tối đa 3.0đ)
-    # -------------------------------------------------------------
-    key_p3 = answer_key.get("part3", {})
-    st_p3 = student_data.get("part3", {})
-    p3_correct = 0
-    p3_details = {}
-
-    for q_num, correct_val in key_p3.items():
-        q_key = int(q_num) if str(q_num).isdigit() else q_num
-        st_val = st_p3.get(q_key) or st_p3.get(str(q_key))
-
-        k_norm = normalize_numeric_string(correct_val)
-        s_norm = normalize_numeric_string(st_val)
-
-        is_c = (k_norm == s_norm and bool(s_norm))
-        if is_c:
-            p3_correct += 1
-
-        p3_details[q_key] = {"student": s_norm, "key": k_norm, "is_correct": is_c}
-
-    score_p3 = round(p3_correct * 0.5, 2)
-
-    total_score = round(score_p1 + score_p2 + score_p3, 2)
-
-    return {
-        "score_part1": score_p1,
-        "score_part2": score_p2,
-        "score_part3": score_p3,
-        "total_score": total_score,
-        "p1_correct": p1_correct,
-        "p3_correct": p3_correct,
-        "details_p1": p1_details,
-        "details_p2": p2_details,
-        "details_p3": p3_details
-    }
+def generate_sample_answer_key(num_questions: int = 50) -> Dict[int, str]:
+    """Tạo bộ đáp án chuẩn mẫu cho N câu hỏi"""
+    return {i: ['A', 'B', 'C', 'D'][(i * 3 + 1) % 4] for i in range(1, num_questions + 1)}

@@ -1,478 +1,280 @@
 """
 Module: excel_exporter.py
-Phụ trách: Xuất báo cáo kết quả thi ra file Excel hoàn chỉnh gồm 3 Sheet:
-  - Sheet 1: Bảng điểm tổng hợp (SBD, Họ tên, Mã đề, Điểm thành phần, Điểm tổng, Xếp loại, Trạng thái)
-  - Sheet 2: Bảng chi tiết bài làm của từng học sinh theo từng câu hỏi
-  - Sheet 3: Thống kê phổ điểm, chỉ số chất lượng, và tỷ lệ đúng/sai chi tiết theo từng câu & từng phần thi
-Hỗ trợ cả 2 chế độ: Full trắc nghiệm và Chuẩn THPT mới BGD&ĐT.
-Tuân thủ: Không đưa bài lỗi vào thống kê điểm số chung của lớp.
+Xuất báo cáo kết quả thi linh hoạt theo số câu (20, 40, 50 câu) ra file Excel:
+  - Sheet 1: Bảng điểm tổng hợp (Mã HS, Tên file, Đúng, Sai, Trống, Điểm, Xếp loại, Trạng thái)
+  - Sheet 2: Chi tiết các câu bài làm của từng học sinh
+  - Sheet 3: Thống kê phổ điểm & Tỷ lệ đúng/sai theo từng câu hỏi
 """
 
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from core.models import Exam, Submission, ExamMode
-from core.grading_engine import normalize_numeric_string
+from core.models import Submission
 
 
-def get_grade_rank(score: float) -> str:
-    if score >= 8.0:
-        return "Giỏi"
-    elif score >= 6.5:
-        return "Khá"
-    elif score >= 5.0:
-        return "Trung bình"
-    else:
-        return "Chưa đạt"
-
-
-def export_exam_results_to_excel(exam: Exam, submissions: List[Submission], output_filepath: str) -> bool:
+def export_exam_results_to_excel(
+    submissions: List[Submission], 
+    answer_key: Dict[int, str], 
+    output_filepath: str,
+    exam_title: str = "BẢNG ĐIỂM BÀI THI TRẮC NGHIỆM"
+) -> bool:
+    """Xuất danh sách kết quả học sinh ra file Excel với 3 Sheet chuyên nghiệp"""
     try:
         os.makedirs(os.path.dirname(os.path.abspath(output_filepath)), exist_ok=True)
         wb = openpyxl.Workbook()
+        total_q = len(answer_key) or 50
 
-        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-        sec_fill = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
-        stripe_fill = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")
-        green_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
-        yellow_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-        red_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+        fill_header = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+        fill_subheader = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
+        fill_stripe = PatternFill(start_color="F2F5F9", end_color="F2F5F9", fill_type="solid")
+        fill_green = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+        fill_red = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+        fill_yellow = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
 
-        white_title_font = Font(name="Arial", size=13, bold=True, color="FFFFFF")
-        white_header_font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
-        sub_title_font = Font(name="Arial", size=11, bold=True, color="1F4E78")
-        bold_font = Font(name="Arial", size=11, bold=True)
-        center_al = Alignment(horizontal="center", vertical="center")
-        left_al = Alignment(horizontal="left", vertical="center")
+        font_title = Font(name="Arial", size=13, bold=True, color="FFFFFF")
+        font_header = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+        font_bold = Font(name="Arial", size=10, bold=True)
+        font_regular = Font(name="Arial", size=10)
 
-        thin_border = Border(
-            left=Side(style="thin", color="D9D9D9"), right=Side(style="thin", color="D9D9D9"),
-            top=Side(style="thin", color="D9D9D9"), bottom=Side(style="thin", color="D9D9D9")
-        )
+        al_center = Alignment(horizontal="center", vertical="center")
+        al_left = Alignment(horizontal="left", vertical="center")
 
-        # Phân loại bài nộp:
-        valid_submissions = [s for s in submissions if s.status != "Lỗi"]
-        error_submissions = [s for s in submissions if s.status == "Lỗi"]
-        review_submissions = [s for s in submissions if s.status == "Cần kiểm tra"]
-        # Bài có điểm hợp lệ (không lỗi và có mã đề hợp lệ)
-        scored_submissions = [
-            s for s in valid_submissions 
-            if s.status == "Đã chấm" or (s.status == "Cần kiểm tra" and (s.exam_code in (exam.answer_keys or {})))
-        ]
+        thin_side = Side(style="thin", color="D9D9D9")
+        thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
         # -------------------------------------------------------------
         # SHEET 1: BẢNG ĐIỂM TỔNG HỢP
         # -------------------------------------------------------------
         ws1 = wb.active
         ws1.title = "Bang_Diem_Tong_Hop"
+        ws1.views.sheetView[0].showGridLines = True
 
-        mode_desc = f"TRẮC NGHIỆM ({exam.num_questions or 40} CÂU)" if exam.mode == ExamMode.FULL_MCQ else "CHUẨN THI THPT MỚI BGD&ĐT (3 PHẦN)"
         ws1.merge_cells("A1:J1")
-        ws1["A1"] = f"BẢNG KẾT QUẢ ĐIỂM THI: {exam.title.upper()} ({mode_desc})"
-        ws1["A1"].font = white_title_font
-        ws1["A1"].fill = header_fill
-        ws1["A1"].alignment = center_al
+        cell_title = ws1["A1"]
+        cell_title.value = f"{exam_title.upper()} ({total_q} CÂU)"
+        cell_title.font = font_title
+        cell_title.fill = fill_header
+        cell_title.alignment = al_center
+        ws1.row_dimensions[1].height = 36
 
-        ws1.merge_cells("A2:J2")
-        ws1["A2"] = (
-            f"Môn: {exam.subject} | Lớp: {exam.class_name} | Ngày tạo: {exam.created_at} | "
-            f"Tổng số bài: {len(submissions)} (Hợp lệ: {len(valid_submissions)} | Cần kiểm tra: {len(review_submissions)} | Lỗi: {len(error_submissions)})"
-        )
-        ws1["A2"].font = Font(name="Arial", size=10, italic=True)
-        ws1["A2"].alignment = center_al
+        headers_s1 = [
+            "STT", "Mã học sinh", "Tên file ảnh", "Mã đề", 
+            f"Số câu đúng (/{total_q})", "Số câu sai", "Bỏ trống", "Điểm số", "Xếp loại", "Trạng thái / Ghi chú"
+        ]
 
-        if exam.mode == ExamMode.FULL_MCQ:
-            headers1 = ["STT", "Mã HS / SBD", "Họ và tên", "Mã đề", "Số câu đúng", "Số câu sai", "Bỏ trống", "Điểm số", "Xếp loại", "Trạng thái & Ghi chú"]
-        else:
-            headers1 = ["STT", "SBD", "Họ và tên", "Mã đề", "Điểm P1 (3đ)", "Điểm P2 (4đ)", "Điểm P3 (3đ)", "Tổng điểm", "Xếp loại", "Trạng thái & Ghi chú"]
+        for col_idx, h_text in enumerate(headers_s1, start=1):
+            cell = ws1.cell(row=2, column=col_idx, value=h_text)
+            cell.font = font_header
+            cell.fill = fill_subheader
+            cell.alignment = al_center
+            cell.border = thin_border
+        ws1.row_dimensions[2].height = 26
 
-        for col_idx, h in enumerate(headers1, 1):
-            cell = ws1.cell(row=4, column=col_idx, value=h)
-            cell.font = white_header_font
-            cell.fill = sec_fill
-            cell.alignment = center_al
-        ws1.row_dimensions[4].height = 25
+        for row_idx, sub in enumerate(submissions, start=3):
+            is_stripe = (row_idx % 2 == 0)
+            row_fill = fill_stripe if is_stripe else None
 
-        for idx, sub in enumerate(submissions, start=1):
-            row_idx = idx + 4
-            stt = idx
-            sid = sub.student_id or f"HS_{idx:03d}"
-            name = sub.student_name or f"Học sinh {idx}"
-            code = sub.exam_code or "???"
-
-            if sub.status == "Lỗi":
-                status_note = f"Lỗi: {sub.error_message or 'Không đọc được bài làm'}"
-                if exam.mode == ExamMode.FULL_MCQ:
-                    vals = [stt, sid, name, code, "-", "-", "-", "-", "Lỗi", status_note]
-                else:
-                    vals = [stt, sid, name, code, "-", "-", "-", "-", "Lỗi", status_note]
+            stt = row_idx - 2
+            st_id = sub.student_id or sub.submission_id
+            fname = os.path.basename(sub.image_path) if sub.image_path else ""
+            
+            if sub.score >= 8.0:
+                rank = "Giỏi"
+            elif sub.score >= 6.5:
+                rank = "Khá"
+            elif sub.score >= 5.0:
+                rank = "Trung bình"
             else:
-                rank = get_grade_rank(sub.total_score)
-                status_note = "Đã chấm" if sub.status == "Đã chấm" else f"Cần kiểm tra ({sub.error_message})"
-                if exam.mode == ExamMode.FULL_MCQ:
-                    vals = [stt, sid, name, code, sub.correct_count, sub.wrong_count, sub.blank_count, sub.total_score, rank, status_note]
-                else:
-                    vals = [stt, sid, name, code, sub.score_part1, sub.score_part2, sub.score_part3, sub.total_score, rank, status_note]
+                rank = "Yếu"
 
-            for c_idx, val in enumerate(vals, 1):
-                cell = ws1.cell(row=row_idx, column=c_idx, value=val)
-                cell.alignment = left_al if c_idx == 10 else center_al
+            note = sub.error_message if sub.status == "Lỗi" else sub.warning_message
+            if not note and sub.status == "Thành công":
+                note = "Hợp lệ"
+
+            row_data = [
+                stt, st_id, fname, sub.exam_code,
+                sub.correct_count, sub.wrong_count, sub.blank_count,
+                sub.score if sub.status != "Lỗi" else 0.0,
+                rank if sub.status != "Lỗi" else "Lỗi",
+                note
+            ]
+
+            for col_idx, val in enumerate(row_data, start=1):
+                cell = ws1.cell(row=row_idx, column=col_idx, value=val)
+                cell.font = font_regular
                 cell.border = thin_border
-                if c_idx in (8, 9):
-                    cell.font = bold_font
-                if sub.status == "Lỗi":
-                    cell.fill = red_fill
-                elif sub.status == "Cần kiểm tra":
-                    cell.fill = yellow_fill
-                elif idx % 2 == 0:
-                    cell.fill = stripe_fill
+                cell.alignment = al_center if col_idx not in [2, 3, 10] else al_left
+                if row_fill:
+                    cell.fill = row_fill
 
-        for c_letter in ["A", "B", "C", "D", "E", "F", "G", "H", "I"]:
-            ws1.column_dimensions[c_letter].width = 16
-        ws1.column_dimensions["C"].width = 24
-        ws1.column_dimensions["J"].width = 38
+                if col_idx == 8 and sub.status != "Lỗi":
+                    cell.font = font_bold
+                    if sub.score >= 8.0:
+                        cell.fill = fill_green
+                    elif sub.score < 5.0:
+                        cell.fill = fill_red
+
+                if col_idx == 10 and sub.status == "Lỗi":
+                    cell.fill = fill_red
+
+            ws1.row_dimensions[row_idx].height = 22
+
+        for col in ws1.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws1.column_dimensions[col_letter].width = max(max_len + 3, 11)
+        ws1.column_dimensions["C"].width = 28
+        ws1.column_dimensions["J"].width = 35
 
         # -------------------------------------------------------------
-        # SHEET 2: BẢNG CHI TIẾT BÀI LÀM
+        # SHEET 2: CHI TIẾT BÀI LÀM
         # -------------------------------------------------------------
         ws2 = wb.create_sheet(title="Chi_Tiet_Bai_Lam")
-        ws2["A1"] = "BẢNG CHI TIẾT ĐÁP ÁN BÀI LÀM TỪNG THÍ SINH"
-        ws2["A1"].font = white_title_font
-        ws2["A1"].fill = header_fill
-        ws2.merge_cells("A1:F1")
-        ws2["A1"].alignment = center_al
+        ws2.views.sheetView[0].showGridLines = True
 
-        if exam.mode == ExamMode.FULL_MCQ:
-            num_q = exam.num_questions or 40
-            headers2 = ["STT", "Mã HS", "Họ tên", "Mã đề", "Trạng thái"] + [f"C{i}" for i in range(1, num_q + 1)]
-            for col_idx, h in enumerate(headers2, 1):
-                c = ws2.cell(row=3, column=col_idx, value=h)
-                c.font = white_header_font
-                c.fill = sec_fill
-                c.alignment = center_al
+        headers_s2 = ["STT", "Mã HS", "Tên file"] + [f"C{i}" for i in range(1, total_q + 1)]
+        for col_idx, h_text in enumerate(headers_s2, start=1):
+            cell = ws2.cell(row=1, column=col_idx, value=h_text)
+            cell.font = font_header
+            cell.fill = fill_header
+            cell.alignment = al_center
+            cell.border = thin_border
+        ws2.row_dimensions[1].height = 26
 
-            for idx, sub in enumerate(submissions, start=1):
-                r = idx + 3
-                ws2.cell(row=r, column=1, value=idx).alignment = center_al
-                ws2.cell(row=r, column=2, value=sub.student_id).alignment = center_al
-                ws2.cell(row=r, column=3, value=sub.student_name).alignment = center_al
-                ws2.cell(row=r, column=4, value=sub.exam_code).alignment = center_al
-                ws2.cell(row=r, column=5, value=sub.status).alignment = center_al
+        # Hàng KEY
+        ws2.cell(row=2, column=1, value="KEY").font = font_bold
+        ws2.cell(row=2, column=2, value="ĐÁP ÁN ĐỀ").font = font_bold
+        ws2.cell(row=2, column=3, value="CHÍNH THỨC").font = font_bold
+        for c in range(1, 4):
+            ws2.cell(row=2, column=c).fill = fill_yellow
+            ws2.cell(row=2, column=c).alignment = al_center
+            ws2.cell(row=2, column=c).border = thin_border
 
-                ans_map = sub.extracted_data.get("answers", {}) if isinstance(sub.extracted_data, dict) else {}
-                for q_i in range(1, num_q + 1):
-                    val = ans_map.get(q_i) or ans_map.get(str(q_i)) or ("Lỗi" if sub.status == "Lỗi" else "-")
-                    if isinstance(val, list):
-                        val = "/".join(val)
-                    c = ws2.cell(row=r, column=5 + q_i, value=str(val))
-                    c.alignment = center_al
-                    c.border = thin_border
-        else:
-            headers2 = ["STT", "SBD", "Họ tên", "Mã đề", "Trạng thái"]
-            headers2 += [f"P1_C{i}" for i in range(1, 13)]
-            for q_i in range(1, 5):
-                for s_i in ['a', 'b', 'c', 'd']:
-                    headers2.append(f"P2_C{q_i}{s_i}")
-            headers2 += [f"P3_C{i}" for i in range(1, 7)]
+        for q in range(1, total_q + 1):
+            cell = ws2.cell(row=2, column=3 + q, value=answer_key.get(q, ""))
+            cell.font = font_bold
+            cell.fill = fill_yellow
+            cell.alignment = al_center
+            cell.border = thin_border
+        ws2.row_dimensions[2].height = 22
 
-            for col_idx, h in enumerate(headers2, 1):
-                c = ws2.cell(row=3, column=col_idx, value=h)
-                c.font = Font(name="Arial", size=9, bold=True, color="FFFFFF")
-                c.fill = sec_fill
-                c.alignment = center_al
+        # Từng học sinh
+        for row_idx, sub in enumerate(submissions, start=3):
+            stt = row_idx - 2
+            st_id = sub.student_id or sub.submission_id
+            fname = os.path.basename(sub.image_path) if sub.image_path else ""
 
-            for idx, sub in enumerate(submissions, start=1):
-                r = idx + 3
-                ws2.cell(row=r, column=1, value=idx).alignment = center_al
-                ws2.cell(row=r, column=2, value=sub.student_id).alignment = center_al
-                ws2.cell(row=r, column=3, value=sub.student_name).alignment = center_al
-                ws2.cell(row=r, column=4, value=sub.exam_code).alignment = center_al
-                ws2.cell(row=r, column=5, value=sub.status).alignment = center_al
+            ws2.cell(row=row_idx, column=1, value=stt).alignment = al_center
+            ws2.cell(row=row_idx, column=2, value=st_id).alignment = al_left
+            ws2.cell(row=row_idx, column=3, value=fname).alignment = al_left
+            for c in range(1, 4):
+                ws2.cell(row=row_idx, column=c).font = font_regular
+                ws2.cell(row=row_idx, column=c).border = thin_border
 
-                col_pointer = 6
-                p1_data = sub.extracted_data.get("part1", {}) if isinstance(sub.extracted_data, dict) else {}
-                for q_i in range(1, 13):
-                    v = p1_data.get(q_i) or p1_data.get(str(q_i)) or ("Lỗi" if sub.status == "Lỗi" else "-")
-                    if isinstance(v, list):
-                        v = "/".join(v)
-                    c = ws2.cell(row=r, column=col_pointer, value=str(v))
-                    c.alignment = center_al; c.border = thin_border
-                    col_pointer += 1
+            for q in range(1, total_q + 1):
+                ans = sub.answers.get(q)
+                key = answer_key.get(q, "")
+                disp_val = ""
+                if ans is None:
+                    disp_val = "-"
+                elif isinstance(ans, (list, tuple)):
+                    disp_val = ",".join(ans)
+                else:
+                    disp_val = str(ans)
 
-                p2_data = sub.extracted_data.get("part2", {}) if isinstance(sub.extracted_data, dict) else {}
-                for q_i in range(1, 5):
-                    q_subs = p2_data.get(q_i) or p2_data.get(str(q_i)) or {}
-                    for s_i in ['a', 'b', 'c', 'd']:
-                        v = q_subs.get(s_i) or ("Lỗi" if sub.status == "Lỗi" else "-")
-                        c = ws2.cell(row=r, column=col_pointer, value=str(v))
-                        c.alignment = center_al; c.border = thin_border
-                        col_pointer += 1
+                cell = ws2.cell(row=row_idx, column=3 + q, value=disp_val)
+                cell.font = font_regular
+                cell.alignment = al_center
+                cell.border = thin_border
 
-                p3_data = sub.extracted_data.get("part3", {}) if isinstance(sub.extracted_data, dict) else {}
-                for q_i in range(1, 7):
-                    v = p3_data.get(q_i) or p3_data.get(str(q_i)) or ("Lỗi" if sub.status == "Lỗi" else "-")
-                    c = ws2.cell(row=r, column=col_pointer, value=str(v))
-                    c.alignment = center_al; c.border = thin_border
-                    col_pointer += 1
+                if sub.status != "Lỗi":
+                    if disp_val == key and key:
+                        cell.fill = fill_green
+                    else:
+                        cell.fill = fill_red
+
+            ws2.row_dimensions[row_idx].height = 20
+
+        ws2.column_dimensions["A"].width = 6
+        ws2.column_dimensions["B"].width = 14
+        ws2.column_dimensions["C"].width = 24
+        for q in range(1, total_q + 1):
+            col_letter = openpyxl.utils.get_column_letter(3 + q)
+            ws2.column_dimensions[col_letter].width = 5.5
 
         # -------------------------------------------------------------
-        # SHEET 3: THỐNG KÊ PHỔ ĐIỂM & TỶ LỆ ĐÚNG/SAI THEO TỪNG CÂU
+        # SHEET 3: THỐNG KÊ PHỔ ĐIỂM
         # -------------------------------------------------------------
         ws3 = wb.create_sheet(title="Thong_Ke_Pho_Diem")
-        ws3.merge_cells("A1:G1")
-        ws3["A1"] = f"BÁO CÁO THỐNG KÊ CHẤT LƯỢNG KỲ THI: {exam.title.upper()}"
-        ws3["A1"].font = white_title_font
-        ws3["A1"].fill = header_fill
-        ws3["A1"].alignment = center_al
+        ws3.views.sheetView[0].showGridLines = True
 
-        # 1. Chỉ số tổng quan (chỉ tính trên bài thi hợp lệ)
-        scores = [s.total_score for s in scored_submissions]
-        num_scored = len(scores)
-        avg_score = round(sum(scores) / max(num_scored, 1), 2) if num_scored else 0.0
-        max_s = max(scores) if scores else 0.0
-        min_s = min(scores) if scores else 0.0
+        valid_subs = [s for s in submissions if s.status != "Lỗi"]
+        total_valid = len(valid_subs)
 
-        cnt_gioi = sum(1 for s in scores if s >= 8.0)
-        cnt_kha = sum(1 for s in scores if 6.5 <= s < 8.0)
-        cnt_tb = sum(1 for s in scores if 5.0 <= s < 6.5)
-        cnt_yeu = sum(1 for s in scores if s < 5.0)
+        ws3["A1"] = f"BÁO CÁO THỐNG KÊ PHỔ ĐIỂM ({total_q} CÂU)"
+        ws3["A1"].font = font_title
+        ws3["A1"].fill = fill_header
+        ws3.merge_cells("A1:D1")
+        ws3.row_dimensions[1].height = 32
+
+        scores = [s.score for s in valid_subs]
+        avg_score = round(sum(scores) / max(total_valid, 1), 2) if scores else 0.0
+        max_score = max(scores) if scores else 0.0
+        min_score = min(scores) if scores else 0.0
 
         stats_summary = [
-            ("Tổng số bài thi tiếp nhận", len(submissions)),
-            ("Số bài chấm thành công (hợp lệ)", len(scored_submissions)),
-            ("Số bài nghi vấn (Cần kiểm tra)", len(review_submissions)),
-            ("Số bài lỗi (không chấm được)", len(error_submissions)),
-            ("Điểm trung bình (chỉ tính bài hợp lệ)", avg_score),
-            ("Điểm cao nhất", max_s),
-            ("Điểm thấp nhất", min_s),
-            ("Số bài Giỏi (>= 8.0 điểm)", f"{cnt_gioi} ({cnt_gioi/max(num_scored,1)*100:.1f}%)"),
-            ("Số bài Khá (6.5 - 7.9 điểm)", f"{cnt_kha} ({cnt_kha/max(num_scored,1)*100:.1f}%)"),
-            ("Số bài Trung bình (5.0 - 6.4 điểm)", f"{cnt_tb} ({cnt_tb/max(num_scored,1)*100:.1f}%)"),
-            ("Số bài Chưa đạt (< 5.0 điểm)", f"{cnt_yeu} ({cnt_yeu/max(num_scored,1)*100:.1f}%)")
+            ("Tổng số bài xử lý:", len(submissions)),
+            ("Số bài hợp lệ:", total_valid),
+            ("Số bài lỗi:", len(submissions) - total_valid),
+            ("Điểm trung bình:", avg_score),
+            ("Điểm cao nhất:", max_score),
+            ("Điểm thấp nhất:", min_score),
         ]
 
-        ws3.merge_cells("A3:B3")
-        ws3["A3"] = "I. CHỈ SỐ KPI CHẤT LƯỢNG KỲ THI"
-        ws3["A3"].font = sub_title_font
+        for r_i, (k, v) in enumerate(stats_summary, start=3):
+            c_k = ws3.cell(row=r_i, column=1, value=k)
+            c_k.font = font_bold
+            c_v = ws3.cell(row=r_i, column=2, value=v)
+            c_v.font = font_bold
+            c_v.alignment = al_center
 
-        ws3.cell(row=4, column=1, value="Chỉ số đánh giá").font = white_header_font
-        ws3.cell(row=4, column=1).fill = sec_fill
-        ws3.cell(row=4, column=2, value="Giá trị thống kê").font = white_header_font
-        ws3.cell(row=4, column=2).fill = sec_fill
+        ws3["A11"] = "TỶ LỆ LÀM ĐÚNG THEO TỪNG CÂU HỎI"
+        ws3["A11"].font = font_header
+        ws3["A11"].fill = fill_subheader
+        ws3.merge_cells("A11:D11")
 
-        for idx, (label, val) in enumerate(stats_summary, start=5):
-            c1 = ws3.cell(row=idx, column=1, value=label)
-            c2 = ws3.cell(row=idx, column=2, value=val)
-            c1.border = thin_border
-            c2.border = thin_border
-            c2.alignment = center_al
-            c2.font = bold_font
-            if idx % 2 == 0:
-                c1.fill = stripe_fill
-                c2.fill = stripe_fill
+        headers_s3 = ["Câu hỏi", "Đáp án đề", "Số học sinh đúng", "Tỷ lệ đúng (%)"]
+        for c_i, h in enumerate(headers_s3, start=1):
+            cell = ws3.cell(row=12, column=c_i, value=h)
+            cell.font = font_header
+            cell.fill = fill_subheader
+            cell.alignment = al_center
+            cell.border = thin_border
 
-        # 2. Bảng phổ điểm theo khoảng (0-10)
-        curr_row = 5 + len(stats_summary) + 2
-        ws3.merge_cells(f"A{curr_row}:C{curr_row}")
-        ws3[f"A{curr_row}"] = "II. BẢNG PHỔ ĐIỂM CHI TIẾT (KHOẢNG 1.0 ĐIỂM)"
-        ws3[f"A{curr_row}"].font = sub_title_font
-        curr_row += 1
+        for q in range(1, total_q + 1):
+            key = answer_key.get(q, "")
+            correct_cnt = sum(1 for s in valid_subs if s.answers.get(q) == key)
+            pct = round((correct_cnt / max(total_valid, 1)) * 100, 1)
 
-        dist_headers = ["Khoảng điểm", "Số lượng bài", "Tỷ lệ (%)"]
-        for c_i, h in enumerate(dist_headers, 1):
-            cell = ws3.cell(row=curr_row, column=c_i, value=h)
-            cell.font = white_header_font
-            cell.fill = sec_fill
-            cell.alignment = center_al
-        curr_row += 1
+            r = 12 + q
+            ws3.cell(row=r, column=1, value=f"Câu {q:02d}").alignment = al_center
+            ws3.cell(row=r, column=2, value=key).alignment = al_center
+            ws3.cell(row=r, column=3, value=correct_cnt).alignment = al_center
+            ws3.cell(row=r, column=4, value=f"{pct}%").alignment = al_center
 
-        score_ranges = [
-            ("[0.0 - 1.0)", lambda s: 0.0 <= s < 1.0),
-            ("[1.0 - 2.0)", lambda s: 1.0 <= s < 2.0),
-            ("[2.0 - 3.0)", lambda s: 2.0 <= s < 3.0),
-            ("[3.0 - 4.0)", lambda s: 3.0 <= s < 4.0),
-            ("[4.0 - 5.0)", lambda s: 4.0 <= s < 5.0),
-            ("[5.0 - 6.0)", lambda s: 5.0 <= s < 6.0),
-            ("[6.0 - 7.0)", lambda s: 6.0 <= s < 7.0),
-            ("[7.0 - 8.0)", lambda s: 7.0 <= s < 8.0),
-            ("[8.0 - 9.0)", lambda s: 8.0 <= s < 9.0),
-            ("[9.0 - 10.0]", lambda s: 9.0 <= s <= 10.0),
-        ]
+            for c in range(1, 5):
+                ws3.cell(row=r, column=c).border = thin_border
+                ws3.cell(row=r, column=c).font = font_regular
 
-        for label_range, fn_filter in score_ranges:
-            cnt_in_range = sum(1 for s in scores if fn_filter(s))
-            pct_in_range = (cnt_in_range / max(num_scored, 1)) * 100.0
-            r_vals = [label_range, cnt_in_range, f"{pct_in_range:.1f}%"]
-            for c_i, val in enumerate(r_vals, 1):
-                cell = ws3.cell(row=curr_row, column=c_i, value=val)
-                cell.alignment = center_al
-                cell.border = thin_border
-            curr_row += 1
-
-        # 3. Tỷ lệ đúng / sai theo từng câu hỏi & từng phần thi
-        curr_row += 2
-        ws3.merge_cells(f"A{curr_row}:G{curr_row}")
-        ws3[f"A{curr_row}"] = "III. MA TRẬN & TỶ LỆ ĐÚNG / SAI THEO TỪNG CÂU HỎI"
-        ws3[f"A{curr_row}"].font = sub_title_font
-        curr_row += 1
-
-        q_headers = ["Câu hỏi", "Số bài Đúng", "Tỷ lệ Đúng (%)", "Số bài Sai", "Tỷ lệ Sai (%)", "Bỏ trống", "Tỷ lệ Trống (%)"]
-        for c_i, h in enumerate(q_headers, 1):
-            cell = ws3.cell(row=curr_row, column=c_i, value=h)
-            cell.font = white_header_font
-            cell.fill = sec_fill
-            cell.alignment = center_al
-        curr_row += 1
-
-        if exam.mode == ExamMode.FULL_MCQ:
-            num_q = exam.num_questions or 40
-            for q_num in range(1, num_q + 1):
-                n_correct = 0
-                n_wrong = 0
-                n_blank = 0
-
-                for sub in scored_submissions:
-                    ans_map = sub.extracted_data.get("answers", {}) if isinstance(sub.extracted_data, dict) else {}
-                    st_val = ans_map.get(q_num) or ans_map.get(str(q_num))
-                    sub_key = (exam.answer_keys or {}).get(sub.exam_code, {})
-                    key_val = sub_key.get(q_num) or sub_key.get(str(q_num))
-
-                    if not st_val or str(st_val).strip() == "" or str(st_val).strip() == "-":
-                        n_blank += 1
-                    elif key_val and str(st_val).strip().upper() == str(key_val).strip().upper():
-                        n_correct += 1
-                    else:
-                        n_wrong += 1
-
-                pct_c = (n_correct / max(num_scored, 1)) * 100.0
-                pct_w = (n_wrong / max(num_scored, 1)) * 100.0
-                pct_b = (n_blank / max(num_scored, 1)) * 100.0
-
-                q_row_vals = [f"Câu {q_num:02d}", n_correct, f"{pct_c:.1f}%", n_wrong, f"{pct_w:.1f}%", n_blank, f"{pct_b:.1f}%"]
-                for c_i, val in enumerate(q_row_vals, 1):
-                    cell = ws3.cell(row=curr_row, column=c_i, value=val)
-                    cell.alignment = center_al
-                    cell.border = thin_border
-                    if c_i == 3:  # Tỷ lệ đúng
-                        cell.fill = green_fill if pct_c >= 70.0 else (red_fill if pct_c < 40.0 else stripe_fill)
-                curr_row += 1
-
-        else:
-            # Mode THPT 2025: Thống kê 3 Phần
-            # Phần I: 12 câu
-            ws3.cell(row=curr_row, column=1, value="[PHẦN I: 12 CÂU 4 LỰA CHỌN]").font = bold_font
-            curr_row += 1
-            for q_num in range(1, 13):
-                n_correct = 0; n_wrong = 0; n_blank = 0
-                for sub in scored_submissions:
-                    p1_data = sub.extracted_data.get("part1", {}) if isinstance(sub.extracted_data, dict) else {}
-                    st_val = p1_data.get(q_num) or p1_data.get(str(q_num))
-                    sub_key = (exam.answer_keys or {}).get(sub.exam_code, {}).get("part1", {})
-                    key_val = sub_key.get(q_num) or sub_key.get(str(q_num))
-
-                    if not st_val or str(st_val).strip() in {"", "-", "None"}:
-                        n_blank += 1
-                    elif key_val and str(st_val).strip().upper() == str(key_val).strip().upper():
-                        n_correct += 1
-                    else:
-                        n_wrong += 1
-
-                pct_c = (n_correct / max(num_scored, 1)) * 100.0
-                pct_w = (n_wrong / max(num_scored, 1)) * 100.0
-                pct_b = (n_blank / max(num_scored, 1)) * 100.0
-
-                q_row_vals = [f"P1 - Câu {q_num:02d}", n_correct, f"{pct_c:.1f}%", n_wrong, f"{pct_w:.1f}%", n_blank, f"{pct_b:.1f}%"]
-                for c_i, val in enumerate(q_row_vals, 1):
-                    cell = ws3.cell(row=curr_row, column=c_i, value=val)
-                    cell.alignment = center_al
-                    cell.border = thin_border
-                    if c_i == 3:
-                        cell.fill = green_fill if pct_c >= 70.0 else (red_fill if pct_c < 40.0 else stripe_fill)
-                curr_row += 1
-
-            # Phần II: 4 câu x 4 ý (16 ý)
-            curr_row += 1
-            ws3.cell(row=curr_row, column=1, value="[PHẦN II: 4 CÂU ĐÚNG / SAI - 16 Ý]").font = bold_font
-            curr_row += 1
-            for q_num in range(1, 5):
-                for sub_k in ['a', 'b', 'c', 'd']:
-                    n_correct = 0; n_wrong = 0; n_blank = 0
-                    for sub in scored_submissions:
-                        p2_data = sub.extracted_data.get("part2", {}) if isinstance(sub.extracted_data, dict) else {}
-                        q_data = p2_data.get(q_num) or p2_data.get(str(q_num)) or {}
-                        st_val = q_data.get(sub_k)
-
-                        sub_key = (exam.answer_keys or {}).get(sub.exam_code, {}).get("part2", {}).get(q_num, {}) or {}
-                        key_val = sub_key.get(sub_k)
-
-                        k_std = "Đ" if str(key_val).strip().upper() in {"Đ", "D", "T"} else ("S" if str(key_val).strip().upper() in {"S", "F"} else "")
-                        s_std = "Đ" if str(st_val).strip().upper() in {"Đ", "D", "T"} else ("S" if str(st_val).strip().upper() in {"S", "F"} else "")
-
-                        if not s_std:
-                            n_blank += 1
-                        elif s_std == k_std:
-                            n_correct += 1
-                        else:
-                            n_wrong += 1
-
-                    pct_c = (n_correct / max(num_scored, 1)) * 100.0
-                    pct_w = (n_wrong / max(num_scored, 1)) * 100.0
-                    pct_b = (n_blank / max(num_scored, 1)) * 100.0
-
-                    q_row_vals = [f"P2 - Câu {q_num}{sub_k}", n_correct, f"{pct_c:.1f}%", n_wrong, f"{pct_w:.1f}%", n_blank, f"{pct_b:.1f}%"]
-                    for c_i, val in enumerate(q_row_vals, 1):
-                        cell = ws3.cell(row=curr_row, column=c_i, value=val)
-                        cell.alignment = center_al
-                        cell.border = thin_border
-                    curr_row += 1
-
-            # Phần III: 6 câu Trả lời ngắn
-            curr_row += 1
-            ws3.cell(row=curr_row, column=1, value="[PHẦN III: 6 CÂU TRẢ LỜI NGẮN]").font = bold_font
-            curr_row += 1
-            for q_num in range(1, 7):
-                n_correct = 0; n_wrong = 0; n_blank = 0
-                for sub in scored_submissions:
-                    p3_data = sub.extracted_data.get("part3", {}) if isinstance(sub.extracted_data, dict) else {}
-                    st_val = p3_data.get(q_num) or p3_data.get(str(q_num))
-                    sub_key = (exam.answer_keys or {}).get(sub.exam_code, {}).get("part3", {})
-                    key_val = sub_key.get(q_num) or sub_key.get(str(q_num))
-
-                    s_norm = normalize_numeric_string(st_val)
-                    k_norm = normalize_numeric_string(key_val)
-
-                    if not s_norm:
-                        n_blank += 1
-                    elif k_norm and s_norm == k_norm:
-                        n_correct += 1
-                    else:
-                        n_wrong += 1
-
-                pct_c = (n_correct / max(num_scored, 1)) * 100.0
-                pct_w = (n_wrong / max(num_scored, 1)) * 100.0
-                pct_b = (n_blank / max(num_scored, 1)) * 100.0
-
-                q_row_vals = [f"P3 - Câu {q_num:02d}", n_correct, f"{pct_c:.1f}%", n_wrong, f"{pct_w:.1f}%", n_blank, f"{pct_b:.1f}%"]
-                for c_i, val in enumerate(q_row_vals, 1):
-                    cell = ws3.cell(row=curr_row, column=c_i, value=val)
-                    cell.alignment = center_al
-                    cell.border = thin_border
-                curr_row += 1
-
-        ws3.column_dimensions["A"].width = 30
-        ws3.column_dimensions["B"].width = 16
-        ws3.column_dimensions["C"].width = 16
-        ws3.column_dimensions["D"].width = 16
-        ws3.column_dimensions["E"].width = 16
-        ws3.column_dimensions["F"].width = 16
-        ws3.column_dimensions["G"].width = 16
+        ws3.column_dimensions["A"].width = 16
+        ws3.column_dimensions["B"].width = 14
+        ws3.column_dimensions["C"].width = 18
+        ws3.column_dimensions["D"].width = 18
 
         wb.save(output_filepath)
         return True
-    except PermissionError:
-        print(f"Lỗi: Không thể ghi đè file '{output_filepath}' do file đang được mở bởi ứng dụng khác.")
-        return False
+
     except Exception as e:
-        print(f"Lỗi khi xuất báo cáo Excel: {e}")
+        print(f"Lỗi xuất Excel: {e}")
         return False

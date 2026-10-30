@@ -1,169 +1,114 @@
 """
 Module: visualizer.py
-Phụ trách: Thành viên 2 (Computer Vision 2)
-Chức năng:
-  - Vẽ trực tiếp kết quả chấm lên ảnh bài làm đã nắn phẳng
-  - Ô tô đúng: Khoanh viền XANH LÁ
-  - Ô tô sai: Khoanh viền ĐỎ
-  - Đáp án đúng bị bỏ lỡ: Khoanh viền VÀNG
-  - Đóng dấu bảng tổng kết điểm to, rõ ở góc trên bài làm để trả bài cho học sinh
+Vẽ trực quan kết quả chấm trắc nghiệm 50 câu lên ảnh bài làm đã nắn phẳng.
+- Câu đúng: Khoanh viền XANH LÁ kèm tick
+- Câu sai: Khoanh viền ĐỎ kèm gạch chéo
+- Câu bỏ trống: Khoanh viền VÀNG vào đáp án chuẩn của đề
+- Tô nhiều ô: Khoanh viền ĐỎ tất cả các ô đã chọn và khoanh VÀNG vào đáp án chuẩn
+- Banner điểm số to rõ ràng trên đầu bài làm
 """
 
 import os
 import sys
+import cv2
+import numpy as np
+from typing import Dict, Any, List, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-import cv2
-import numpy as np
-from typing import Dict, Any
-from core.models import ExamMode
-
+from core.omr_extractor import get_question_coords
 
 COLOR_CORRECT = (0, 180, 0)      # Xanh lá
 COLOR_WRONG = (0, 0, 220)        # Đỏ
-COLOR_KEY = (0, 200, 240)        # Vàng (đáp án đúng)
-COLOR_TEXT = (20, 20, 20)
+COLOR_KEY = (0, 200, 240)        # Vàng (đáp án chuẩn)
+COLOR_BLANK = (0, 140, 255)      # Cam
+COLOR_BANNER_BG = (255, 255, 255)
+COLOR_BANNER_BORDER = (0, 0, 160)
+
+OPT_MAP = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
 
 
 def draw_grading_overlay(
-    aligned_img: np.ndarray, 
-    mode: str, 
-    extracted_data: Dict[str, Any], 
-    answer_key: Dict[str, Any],
-    score_info: Dict[str, Any]
+    aligned_img: np.ndarray,
+    student_answers: Dict[int, Any],
+    answer_key: Dict[int, str],
+    score_info: Dict[str, Any],
+    student_id: str = "",
+    coords_map: Optional[Dict[int, Tuple[int, List[int]]]] = None
 ) -> np.ndarray:
-    """
-    Vẽ lớp phủ kết quả chấm điểm lên ảnh bài làm 1200x1700
-    """
+    """Vẽ lớp phủ kết quả chấm điểm 50 câu lên ảnh bài làm 1200x1700"""
     canvas = aligned_img.copy()
 
-    # -------------------------------------------------------------
-    # 1. Đóng dấu Banner điểm số góc trên
-    # -------------------------------------------------------------
-    cv2.rectangle(canvas, (80, 15), (1120, 75), (255, 255, 255), -1)
-    cv2.rectangle(canvas, (80, 15), (1120, 75), (0, 0, 160), 2)
+    # 1. Vẽ Banner tổng kết điểm ở góc trên
+    cv2.rectangle(canvas, (70, 15), (1130, 80), COLOR_BANNER_BG, -1)
+    cv2.rectangle(canvas, (70, 15), (1130, 80), COLOR_BANNER_BORDER, 2)
 
-    total_score = score_info.get("total_score") if mode == ExamMode.THPT_2025 else score_info.get("score", 0.0)
-    score_text = f"DIEM: {total_score:.2f} / 10.0"
-    cv2.putText(canvas, score_text, (100, 58), cv2.FONT_HERSHEY_DUPLEX, 1.2, (0, 0, 200), 3)
+    score = score_info.get("score", 0.0)
+    correct = score_info.get("correct_count", 0)
+    wrong = score_info.get("wrong_count", 0)
+    blank = score_info.get("blank_count", 0)
+    rank = score_info.get("rank", "")
 
-    if mode == ExamMode.FULL_MCQ:
-        stat_text = f"Dung: {score_info.get('correct_count', 0)} | Sai: {score_info.get('wrong_count', 0)} | Trong: {score_info.get('blank_count', 0)}"
-        cv2.putText(canvas, stat_text, (520, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 100, 0), 2)
-    else:
-        p1 = score_info.get("score_part1", 0.0)
-        p2 = score_info.get("score_part2", 0.0)
-        p3 = score_info.get("score_part3", 0.0)
-        stat_text = f"P1 (TN): {p1:.2f}d | P2 (D/S): {p2:.2f}d | P3 (So): {p3:.2f}d"
-        cv2.putText(canvas, stat_text, (480, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 100, 0), 2)
+    title_text = f"DIEM: {score:.2f} / 10.0"
+    if student_id:
+        title_text = f"[{student_id}]  " + title_text
 
-    opt_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
+    cv2.putText(canvas, title_text, (90, 58), cv2.FONT_HERSHEY_DUPLEX, 1.1, (0, 0, 200), 2)
+    stat_text = f"Dung: {correct}/50  |  Sai: {wrong}  |  Trong: {blank}  |  Loai: {rank}"
+    cv2.putText(canvas, stat_text, (520, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 100, 0), 2)
 
-    # -------------------------------------------------------------
-    # 2. Vẽ khoanh tròn theo chế độ
-    # -------------------------------------------------------------
-    if mode == ExamMode.FULL_MCQ:
-        st_answers = extracted_data.get("answers", {})
-        details = score_info.get("details", {})
+    # 2. Vẽ khoanh tròn từng câu trong số 50 câu
+    details = score_info.get("details", {})
+    radius = 15
 
-        for q_num, det in details.items():
-            st_ans = det.get("student")
-            key_ans = det.get("key")
-            is_c = det.get("is_correct", False)
+    for q_num in range(1, 51):
+        if coords_map and q_num in coords_map:
+            cy, cx_list = coords_map[q_num]
+        else:
+            cy, cx_list = get_question_coords(q_num)
 
-            if q_num <= 20:
-                base_x = 120
-                q_row = q_num - 1
-            else:
-                base_x = 640
-                q_row = q_num - 21
-            cy = 600 + q_row * 48
+        det = details.get(q_num, {})
+        st_ans = student_answers.get(q_num)
+        key_ans = str(answer_key.get(q_num, "")).strip().upper()
+        is_correct = det.get("is_correct", False)
 
-            # Nếu đúng: khoanh xanh ô học sinh tô
-            if is_c and st_ans in opt_map:
-                cx = base_x + 125 + opt_map[st_ans] * 75
-                cv2.circle(canvas, (cx, cy), 16, COLOR_CORRECT, 3)
+        # Đúng
+        if is_correct and key_ans in OPT_MAP:
+            cx_c = cx_list[OPT_MAP[key_ans]]
+            cv2.circle(canvas, (cx_c, cy), radius, COLOR_CORRECT, 3)
+            cv2.line(canvas, (cx_c - 5, cy), (cx_c - 1, cy + 5), COLOR_CORRECT, 2)
+            cv2.line(canvas, (cx_c - 1, cy + 5), (cx_c + 6, cy - 5), COLOR_CORRECT, 2)
 
-            # Nếu sai: khoanh đỏ ô học sinh tô, khoanh vàng ô key
-            elif not is_c:
-                if st_ans in opt_map:
-                    cx_st = base_x + 125 + opt_map[st_ans] * 75
-                    cv2.circle(canvas, (cx_st, cy), 16, COLOR_WRONG, 3)
-                    # Gạch chéo nhẹ
-                    cv2.line(canvas, (cx_st - 10, cy - 10), (cx_st + 10, cy + 10), COLOR_WRONG, 2)
-                if key_ans in opt_map:
-                    cx_key = base_x + 125 + opt_map[key_ans] * 75
-                    cv2.circle(canvas, (cx_key, cy), 17, COLOR_KEY, 3)
+        # Bỏ trống
+        elif st_ans is None or st_ans == "":
+            if key_ans in OPT_MAP:
+                cx_k = cx_list[OPT_MAP[key_ans]]
+                cv2.circle(canvas, (cx_k, cy), radius, COLOR_KEY, 3)
 
-    elif mode == ExamMode.THPT_2025:
-        # 1. Vẽ Phần I
-        p1_details = score_info.get("details_p1", {})
-        for q_num, det in p1_details.items():
-            st_ans = det.get("student")
-            key_ans = det.get("key")
-            is_c = det.get("is_correct", False)
+        # Tô nhiều ô
+        elif isinstance(st_ans, (list, tuple)):
+            for a_item in st_ans:
+                if a_item in OPT_MAP:
+                    cx_w = cx_list[OPT_MAP[a_item]]
+                    cv2.circle(canvas, (cx_w, cy), radius, COLOR_WRONG, 3)
+                    cv2.line(canvas, (cx_w - 6, cy - 6), (cx_w + 6, cy + 6), COLOR_WRONG, 2)
+                    cv2.line(canvas, (cx_w - 6, cy + 6), (cx_w + 6, cy - 6), COLOR_WRONG, 2)
+            if key_ans in OPT_MAP:
+                cx_k = cx_list[OPT_MAP[key_ans]]
+                cv2.circle(canvas, (cx_k, cy), radius, COLOR_KEY, 3)
 
-            c_i = 0 if q_num <= 6 else 1
-            bx = 140 if c_i == 0 else 640
-            q_pos = (q_num - 1) if c_i == 0 else (q_num - 7)
-            cy = 550 + q_pos * 40
-
-            if is_c and st_ans in opt_map:
-                cx = bx + 130 + opt_map[st_ans] * 70
-                cv2.circle(canvas, (cx, cy), 15, COLOR_CORRECT, 3)
-            elif not is_c:
-                if st_ans in opt_map:
-                    cx_st = bx + 130 + opt_map[st_ans] * 70
-                    cv2.circle(canvas, (cx_st, cy), 15, COLOR_WRONG, 3)
-                if key_ans in opt_map:
-                    cx_key = bx + 130 + opt_map[key_ans] * 70
-                    cv2.circle(canvas, (cx_key, cy), 16, COLOR_KEY, 3)
-
-        # 2. Vẽ Phần II (Đúng / Sai)
-        p2_details = score_info.get("details_p2", {})
-        for q_num, q_det in p2_details.items():
-            bx = 130 if (q_num % 2 != 0) else 640
-            by = 880 if (q_num <= 2) else 1030
-            sub_dets = q_det.get("sub_items", {})
-            for s_idx, sub in enumerate(['a', 'b', 'c', 'd']):
-                s_det = sub_dets.get(sub, {})
-                st_ans = s_det.get("student")
-                key_ans = s_det.get("key")
-                is_sub_c = s_det.get("is_correct", False)
-                sy = by + 10 + s_idx * 30
-
-                if is_sub_c:
-                    cx = bx + 180 if st_ans == "Đ" else bx + 230
-                    cv2.circle(canvas, (cx, sy), 14, COLOR_CORRECT, 2)
-                else:
-                    if st_ans:
-                        cx_st = bx + 180 if st_ans == "Đ" else bx + 230
-                        cv2.circle(canvas, (cx_st, sy), 14, COLOR_WRONG, 2)
-                    if key_ans:
-                        cx_k = bx + 180 if key_ans == "Đ" else bx + 230
-                        cv2.circle(canvas, (cx_k, sy), 15, COLOR_KEY, 2)
-
-        # 3. Vẽ Phần III (Trả lời ngắn)
-        p3_details = score_info.get("details_p3", {})
-        for q_num, det in p3_details.items():
-            q_idx = int(q_num) - 1
-            col_pos = q_idx % 3
-            row_pos = q_idx // 3
-            bx = 120 + col_pos * 340
-            by = 1260 + row_pos * 160
-
-            st_val = det.get("student", "")
-            key_val = det.get("key", "")
-            is_c = det.get("is_correct", False)
-
-            tag_text = f"Dung: {st_val}" if is_c else f"Sai: {st_val or 'Trong'} (Key: {key_val})"
-            color = COLOR_CORRECT if is_c else COLOR_WRONG
-            # Khung viền kết quả nhỏ phía dưới bảng số
-            cv2.rectangle(canvas, (bx + 8, by + 140), (bx + 260, by + 158), (255, 255, 255), -1)
-            cv2.rectangle(canvas, (bx + 8, by + 140), (bx + 260, by + 158), color, 1)
-            cv2.putText(canvas, tag_text, (bx + 12, by + 154), cv2.FONT_HERSHEY_SIMPLEX, 0.40, color, 1)
+        # Tô sai
+        else:
+            wrong_opt = str(st_ans).strip().upper()
+            if wrong_opt in OPT_MAP:
+                cx_w = cx_list[OPT_MAP[wrong_opt]]
+                cv2.circle(canvas, (cx_w, cy), radius, COLOR_WRONG, 3)
+                cv2.line(canvas, (cx_w - 6, cy - 6), (cx_w + 6, cy + 6), COLOR_WRONG, 2)
+                cv2.line(canvas, (cx_w - 6, cy + 6), (cx_w + 6, cy - 6), COLOR_WRONG, 2)
+            if key_ans in OPT_MAP:
+                cx_k = cx_list[OPT_MAP[key_ans]]
+                cv2.circle(canvas, (cx_k, cy), radius, COLOR_KEY, 3)
 
     return canvas
