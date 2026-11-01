@@ -10,6 +10,7 @@ import os
 import sys
 import glob
 import threading
+from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import cv2
@@ -44,7 +45,7 @@ class OMRGradingApp(ctk.CTk):
         # Trạng thái dữ liệu
         self.image_files = []
         self.image_validation_cache = {}
-        self.answer_key = generate_sample_answer_key(50)
+        self.answer_key = {}
         self.submissions = []
         self.is_processing = False
         self.selected_sub = None
@@ -213,15 +214,15 @@ class OMRGradingApp(ctk.CTk):
 
         btn_row2 = ctk.CTkFrame(left_box, fg_color="transparent")
 
-        # Nút "Chụp màn hình" (screenshot)
+        # Mở webcam để quét phiếu
         ctk.CTkButton(
             btn_row2,
-            text="📸 Chụp màn hình",
+            text="📷 Quét bằng camera",
             width=120,
             height=28,
             fg_color="#2E86AB",
             hover_color="#1B4F72",
-            command=self._action_screenshot,
+            command=self._action_camera_scan,
         ).pack(side="left", padx=5)
         btn_row2.pack(fill="x", padx=10, pady=(2, 6))
 
@@ -534,6 +535,109 @@ class OMRGradingApp(ctk.CTk):
         self._refresh_image_list()
         messagebox.showinfo("Thêm thư mục", f"Đã quét và thêm {new_count} ảnh từ thư mục:\n{dir_path}")
 
+    def _action_camera_scan(self):
+        """Open the computer camera and capture a form into the input list."""
+        if getattr(self, "camera_window", None) is not None and self.camera_window.winfo_exists():
+            self.camera_window.focus_force()
+            return
+
+        camera = cv2.VideoCapture(0)
+        if not camera.isOpened():
+            camera.release()
+            messagebox.showerror(
+                "Không mở được camera",
+                "Không thể truy cập camera máy tính. Vui lòng kiểm tra camera và quyền truy cập.",
+            )
+            return
+
+        self.camera_capture = camera
+        self.camera_frame = None
+        self.camera_window = ctk.CTkToplevel(self)
+        self.camera_window.title("Quét phiếu bằng camera")
+        self.camera_window.geometry("820x650")
+        self.camera_window.resizable(False, False)
+        self.camera_window.transient(self)
+        self.camera_window.grab_set()
+
+        self.camera_preview = ctk.CTkLabel(
+            self.camera_window,
+            text="Đang khởi động camera...",
+            width=780,
+            height=540,
+        )
+        self.camera_preview.pack(padx=15, pady=(15, 8))
+
+        controls = ctk.CTkFrame(self.camera_window, fg_color="transparent")
+        controls.pack(fill="x", padx=15, pady=(0, 15))
+        ctk.CTkButton(
+            controls,
+            text="📸 Chụp ảnh phiếu",
+            width=170,
+            height=36,
+            command=self._capture_camera_frame,
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            controls,
+            text="Đóng camera",
+            width=120,
+            height=36,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            command=self._close_camera,
+        ).pack(side="left")
+        self.camera_window.protocol("WM_DELETE_WINDOW", self._close_camera)
+        self._update_camera_preview()
+
+    def _update_camera_preview(self):
+        """Read and display the next webcam frame without blocking Tkinter."""
+        if getattr(self, "camera_window", None) is None or not self.camera_window.winfo_exists():
+            return
+        ok, frame = self.camera_capture.read()
+        if ok:
+            self.camera_frame = frame
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(rgb)
+            pil_img.thumbnail((780, 540), Image.Resampling.LANCZOS)
+            camera_img = ctk.CTkImage(
+                light_image=pil_img, dark_image=pil_img, size=pil_img.size
+            )
+            self.camera_preview.configure(image=camera_img, text="")
+            self.camera_preview.image = camera_img
+        self.camera_window.after(30, self._update_camera_preview)
+
+    def _capture_camera_frame(self):
+        if self.camera_frame is None:
+            messagebox.showwarning("Chưa có hình ảnh", "Camera chưa lấy được khung hình. Vui lòng thử lại.")
+            return
+
+        capture_dir = os.path.join(PROJECT_ROOT, "dataset", "camera_captures")
+        os.makedirs(capture_dir, exist_ok=True)
+        filename = f"camera_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
+        save_path = os.path.join(capture_dir, filename)
+        if not imwrite_utf8(save_path, self.camera_frame):
+            messagebox.showerror("Lỗi lưu ảnh", "Không thể lưu ảnh chụp từ camera.")
+            return
+
+        norm_path = os.path.abspath(save_path)
+        if norm_path not in self.image_files:
+            self.image_files.append(norm_path)
+        self._refresh_image_list()
+        self._update_progress_status(f"Đã quét phiếu bằng camera: {filename}")
+        self._close_camera()
+
+    def _close_camera(self):
+        if getattr(self, "camera_capture", None) is not None:
+            self.camera_capture.release()
+            self.camera_capture = None
+        if getattr(self, "camera_window", None) is not None:
+            try:
+                self.camera_window.grab_release()
+                self.camera_window.destroy()
+            except tk.TclError:
+                pass
+            self.camera_window = None
+        self.camera_frame = None
+
     def _action_load_sample_dataset(self):
         sample_dir = os.path.join(PROJECT_ROOT, "dataset", "sample_submissions_50cau")
         if not os.path.exists(sample_dir):
@@ -626,6 +730,13 @@ class OMRGradingApp(ctk.CTk):
             messagebox.showerror("Lỗi", "Không tìm thấy đáp án hợp lệ (A, B, C, D) trong chuỗi vừa nhập.")
             return
 
+        if len(parsed) != 50 or any(question not in parsed for question in range(1, 51)):
+            messagebox.showerror(
+                "Answer key incomplete",
+                f"The answer key must contain exactly 50 questions (found {len(parsed)}/50).",
+            )
+            return
+
         self.answer_key = parsed
         self._refresh_answer_key_display()
         messagebox.showinfo("Thành công", f"Đã lưu thành công đáp án chuẩn cho {len(parsed)}/50 câu hỏi!")
@@ -646,6 +757,7 @@ class OMRGradingApp(ctk.CTk):
             return
 
         ext = os.path.splitext(filepath)[1].lower()
+        parsed = {}
         try:
             if ext == ".txt":
                 with open(filepath, "r", encoding="utf-8") as f:
@@ -665,9 +777,9 @@ class OMRGradingApp(ctk.CTk):
                         if 1 <= q <= 50:
                             parsed[q] = c2
 
-            if parsed:
+            if len(parsed) == 50 and all(question in parsed for question in range(1, 51)):
                 self.answer_key = parsed
-                sample_str = " ".join([self.answer_key.get(i, "") for i in range(1, len(parsed) + 1)])
+                sample_str = " ".join([self.answer_key[i] for i in range(1, 51)])
                 self.entry_key.delete(0, "end")
                 self.entry_key.insert(0, sample_str)
                 self._refresh_answer_key_display()
@@ -694,7 +806,7 @@ class OMRGradingApp(ctk.CTk):
         if not self.image_files:
             messagebox.showwarning("Thông báo", "Chưa có ảnh nào trong danh sách. Vui lòng bấm 'Thêm ảnh' hoặc 'Nạp ảnh mẫu'!")
             return
-        if len(self.answer_key) < 5:
+        if len(self.answer_key) != 50 or any(question not in self.answer_key for question in range(1, 51)):
             messagebox.showwarning("Thông báo", "Vui lòng thiết lập đáp án chuẩn trước khi chấm.")
             return
 
