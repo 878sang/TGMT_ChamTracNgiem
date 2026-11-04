@@ -93,7 +93,7 @@ def parse_answer_string(text: str, max_q: int = 50) -> Dict[int, str]:
 
     # Định dạng "1:A" hoặc "1A"
     indexed_matches = re.findall(r'(\d+)\s*[:\.\-]?\s*([A-Da-d])', clean_text)
-    if indexed_matches and len(indexed_matches) >= 3:
+    if indexed_matches:
         for num_str, opt in indexed_matches:
             q_num = int(num_str)
             if 1 <= q_num <= max_q:

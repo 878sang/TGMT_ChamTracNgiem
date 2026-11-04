@@ -1,172 +1,339 @@
-"""
-Bộ kiểm thử tự động cho Phần Mềm Nhận Diện & Chấm Phiếu Trắc Nghiệm THPT (50 Câu)
-Chạy bằng: python tests/test_omr_50_cau.py
-Sử dụng thư viện chuẩn unittest (không phụ thuộc pytest).
-Kiểm tra toàn diện:
-  - Chức năng 1: Quản lý và kiểm tra tính hợp lệ file ảnh
-  - Chức năng 2: Tiền xử lý ảnh & Nắn phẳng phối cảnh (Perspective Transform)
-  - Chức năng 3: Tự động dò ma trận 50 câu & bóc tách OMR (pixel density, bỏ trống, tô trùng)
-  - Chức năng 4: Xử lý nhiều học sinh theo lô (Batch Processing & chống crash)
-  - Chức năng 5: Chấm điểm tự động thang 10.0 & Tự dò đáp án chuẩn từ ảnh & Xuất Excel 3 Sheet
-"""
-
+import json
 import os
-import sys
-import unittest
-import glob
+import tempfile
+import time
+from pathlib import Path
+
+import cv2
 import numpy as np
+import pytest
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
-
-from core.models import Submission, Exam
+from core.image_alignment import (
+    STANDARD_HEIGHT,
+    STANDARD_WIDTH,
+    _select_marker_quad,
+    align_paper,
+    find_fiducial_markers,
+)
+from core.omr_extractor import QUESTION_COORDS, extract_all_data
+from core.exam_processor import process_single_submission
+from core.sheet_generator import (
+    generate_50_mcq_template,
+    generate_sample_submission_50_mcq,
+)
 from core.cv_utils import imread_utf8, imwrite_utf8
-from core.image_alignment import align_paper, find_fiducial_markers, STANDARD_WIDTH, STANDARD_HEIGHT
-from core.omr_extractor import extract_all_data, get_question_coords, detect_bubbles_50_questions
-from core.grading_engine import grade_submission, parse_answer_string, generate_sample_answer_key
-from core.exam_processor import process_single_submission, scan_answer_key_from_image
-from core.excel_exporter import export_exam_results_to_excel
-from core.sheet_generator import generate_all_samples, generate_50_mcq_template
+from core.visualizer import _locate_bubble_circle
 
 
-class TestOMR50Cau(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        generate_all_samples()
-        cls.answer_key = generate_sample_answer_key(50)
-        cls.sample_dir = os.path.join(PROJECT_ROOT, "dataset", "sample_submissions_50cau")
-        cls.template_dir = os.path.join(PROJECT_ROOT, "templates")
-
-    # =========================================================================
-    # CHỨC NĂNG 1: QUẢN LÝ VÀ KIỂM TRA ẢNH HỢP LỆ
-    # =========================================================================
-    def test_func1_read_valid_image(self):
-        valid_path = os.path.join(self.sample_dir, "HS001_NguyenVanA.png")
-        img = imread_utf8(valid_path)
-        self.assertIsNotNone(img)
-        self.assertEqual(img.shape[0], STANDARD_HEIGHT)
-        self.assertEqual(img.shape[1], STANDARD_WIDTH)
-
-    def test_func1_read_non_existent_image(self):
-        img = imread_utf8("dataset/non_existent_image_12345.png")
-        self.assertIsNone(img)
-
-    # =========================================================================
-    # CHỨC NĂNG 2: TIỀN XỬ LÝ & NẮN PHẲNG PHỐI CẢNH (PERSPECTIVE TRANSFORM)
-    # =========================================================================
-    def test_func2_align_flat_image(self):
-        img_path = os.path.join(self.sample_dir, "HS001_NguyenVanA.png")
-        success, aligned, msg = align_paper(img_path)
-        self.assertTrue(success, msg)
-        self.assertIsNotNone(aligned)
-        self.assertEqual(aligned.shape[:2], (STANDARD_HEIGHT, STANDARD_WIDTH))
-
-    def test_func2_align_skewed_camera_photo(self):
-        img_path = os.path.join(self.sample_dir, "HS005_HoangVanE_ChupNghieng.jpg")
-        success, aligned, msg = align_paper(img_path)
-        self.assertTrue(success, f"Nắn phẳng ảnh chụp nghiêng thất bại: {msg}")
-        self.assertEqual(aligned.shape[:2], (STANDARD_HEIGHT, STANDARD_WIDTH))
-
-    def test_func2_align_blank_invalid_image(self):
-        blank = np.ones((800, 600, 3), dtype=np.uint8) * 255
-        success, aligned, msg = align_paper(blank)
-        self.assertFalse(success)
-        self.assertIsNone(aligned)
-
-    # =========================================================================
-    # CHỨC NĂNG 3: TỰ ĐỘNG DÒ MA TRẬN VÀ NHẬN DIỆN ĐÁP ÁN 50 CÂU
-    # =========================================================================
-    def test_func3_auto_detect_bubbles_50_questions(self):
-        """Kiểm tra thuật toán OpenCV tự động dò ma trận 50 câu hỏi trên ảnh phẳng"""
-        img_path = os.path.join(self.sample_dir, "HS001_NguyenVanA.png")
-        img = imread_utf8(img_path, 0)
-        coords_map = detect_bubbles_50_questions(img)
-        self.assertEqual(len(coords_map), 50, "Thuật toán phải tự động dò ra đúng 50 câu hỏi")
-        for q in range(1, 51):
-            cy, cxs = coords_map[q]
-            self.assertTrue(500 <= cy <= 1650)
-            self.assertEqual(len(cxs), 4)
-
-    def test_func3_detect_blank_questions(self):
-        img_path = os.path.join(self.sample_dir, "HS003_LeVanC_BoTrong.png")
-        sub = process_single_submission(img_path, self.answer_key)
-        self.assertEqual(sub.blank_count, 6)
-        for q in [3, 8, 15, 27, 33, 44]:
-            self.assertIsNone(sub.answers.get(q))
-
-    def test_func3_detect_multiple_marked_questions(self):
-        img_path = os.path.join(self.sample_dir, "HS004_PhamThiD_ToTrung.png")
-        sub = process_single_submission(img_path, self.answer_key)
-        self.assertEqual(sub.multiple_count, 3)
-        for q in [10, 22, 39]:
-            self.assertIsInstance(sub.answers.get(q), list)
-
-    # =========================================================================
-    # CHỨC NĂNG 4: XỬ LÝ THEO LÔ (BATCH PROCESSING)
-    # =========================================================================
-    def test_func4_batch_processing_and_error_handling(self):
-        all_images = sorted(glob.glob(os.path.join(self.sample_dir, "*.png")) + 
-                            glob.glob(os.path.join(self.sample_dir, "*.jpg")))
-        self.assertGreaterEqual(len(all_images), 7)
-
-        results = []
-        for p in all_images:
-            sub = process_single_submission(p, self.answer_key)
-            results.append(sub)
-
-        self.assertEqual(len(results), len(all_images))
-        success_list = [s for s in results if s.status == "Thành công"]
-        self.assertGreater(len(success_list), 0)
-
-    # =========================================================================
-    # CHỨC NĂNG 5: CHẤM ĐIỂM & TỰ DÒ ĐÁP ÁN TỪ ẢNH & XUẤT EXCEL
-    # =========================================================================
-    def test_func5_grading_logic(self):
-        st_ans = dict(self.answer_key)
-        res = grade_submission(st_ans, self.answer_key, total_questions=50)
-        self.assertEqual(res["score"], 10.0)
-        self.assertEqual(res["correct_count"], 50)
-        self.assertEqual(res["wrong_count"], 0)
-        self.assertEqual(res["rank"], "Giỏi")
-
-        for q in range(1, 11):
-            st_ans[q] = 'B' if self.answer_key[q] != 'B' else 'C'
-        res2 = grade_submission(st_ans, self.answer_key, total_questions=50)
-        self.assertEqual(res2["score"], 8.0)
-        self.assertEqual(res2["correct_count"], 40)
-        self.assertEqual(res2["wrong_count"], 10)
-
-    def test_func5_scan_answer_key_from_teacher_photo(self):
-        """Kiểm tra tính năng tự động dò tìm đáp án chuẩn từ ảnh phiếu mẫu của giáo viên"""
-        teacher_photo = os.path.join(self.template_dir, "phieu_dap_an_mau_giao_vien.png")
-        success, scanned_key, msg = scan_answer_key_from_image(teacher_photo)
-        self.assertTrue(success, f"Tự dò đáp án từ ảnh giáo viên thất bại: {msg}")
-        self.assertEqual(len(scanned_key), 50, "Phải tự dò được đầy đủ 50 câu")
-        # Kiểm tra xem đáp án dò được có khớp với key ban đầu không
-        self.assertEqual(scanned_key[1], self.answer_key[1])
-        self.assertEqual(scanned_key[50], self.answer_key[50])
-
-    def test_func5_export_excel_3_sheets(self):
-        import openpyxl
-        out_excel = os.path.join(PROJECT_ROOT, "data", "test_report_50cau.xlsx")
-        
-        sub1 = Submission(submission_id="sub1", student_id="HS001", answers=self.answer_key, score=10.0, correct_count=50, status="Thành công")
-        sub2 = Submission(submission_id="sub2", student_id="HS002", answers=self.answer_key, score=8.0, correct_count=40, wrong_count=10, status="Thành công")
-        
-        ok = export_exam_results_to_excel([sub1, sub2], self.answer_key, out_excel)
-        self.assertTrue(ok)
-        self.assertTrue(os.path.exists(out_excel))
-
-        wb = openpyxl.load_workbook(out_excel)
-        self.assertIn("Bang_Diem_Tong_Hop", wb.sheetnames)
-        self.assertIn("Chi_Tiet_Bai_Lam", wb.sheetnames)
-        self.assertIn("Thong_Ke_Pho_Diem", wb.sheetnames)
+ROOT = Path(__file__).resolve().parents[1]
+LAYOUT_PATH = ROOT / "templates" / "layouts" / "thpt50.json"
+EXPECTED = {question: "ABCD"[(question - 1) % 4] for question in range(1, 51)}
 
 
-if __name__ == "__main__":
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestOMR50Cau)
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
-    sys.exit(0 if result.wasSuccessful() else 1)
+def _read_answers(image: np.ndarray, total_questions: int = 50) -> dict:
+    success, aligned, message = align_paper(image)
+    assert success, message
+    assert aligned is not None
+    result = extract_all_data(aligned, total_questions=total_questions)
+    assert result["layout_source"] == "FormTHPT50", result["warning_message"]
+    return result
+
+
+def test_layout_matches_the_supplied_thpt50_sheet():
+    layout = json.loads(LAYOUT_PATH.read_text(encoding="utf-8"))
+    assert (layout["canvas_w"], layout["canvas_h"]) == (1653, 2337)
+    assert layout["capacity"] == 50
+    assert [block["rows"] for block in layout["blocks"]] == [25, 25]
+    assert [block["first_question"] for block in layout["blocks"]] == [1, 26]
+    assert layout["id_blocks"]["student_id"]["columns"] == 6
+    assert layout["id_blocks"]["exam_code"]["columns"] == 3
+    assert len(layout["markers"]) == 25
+    assert (STANDARD_WIDTH, STANDARD_HEIGHT) == (1653, 2337)
+
+
+def test_clean_sheet_reads_all_answers_and_digit_blocks():
+    sheet = generate_sample_submission_50_mcq(
+        answers=EXPECTED,
+        sbd="123456",
+        exam_code="789",
+    )
+    result = _read_answers(sheet)
+    assert result["answers"] == EXPECTED
+    assert result["sbd"] == "123456"
+    assert result["exam_code"] == "789"
+    assert result["overall_confidence"] >= 0.98
+    assert min(result["block_confidence"].values()) >= 0.98
+
+
+@pytest.mark.parametrize("question_count", [10, 20, 30, 40, 50])
+def test_any_supported_question_count_reads_the_first_n_answers(question_count):
+    sheet = generate_sample_submission_50_mcq(answers=EXPECTED)
+    result = _read_answers(sheet, question_count)
+    assert result["answers"] == {
+        question: EXPECTED[question] for question in range(1, question_count + 1)
+    }
+
+
+def test_question_count_above_capacity_has_an_explicit_error():
+    sheet = generate_sample_submission_50_mcq(answers=EXPECTED)
+    success, aligned, message = align_paper(sheet)
+    assert success, message
+    with pytest.raises(ValueError, match="tối đa 50 câu"):
+        extract_all_data(aligned, total_questions=51)
+
+
+@pytest.mark.parametrize("question_count", [10, 20, 30, 40, 50])
+def test_full_grading_pipeline_accepts_any_first_n_count(question_count):
+    answer_key = {q: EXPECTED[q] for q in range(1, question_count + 1)}
+    sheet = generate_sample_submission_50_mcq(answers=answer_key)
+    with tempfile.TemporaryDirectory() as output_dir:
+        image_path = os.path.join(output_dir, "student.png")
+        assert imwrite_utf8(image_path, sheet)
+        submission = process_single_submission(
+            image_path,
+            answer_key,
+            annotated_dir=output_dir,
+            total_questions=question_count,
+        )
+    assert submission.status == "Thành công", submission.error_message
+    assert submission.correct_count == question_count
+    assert submission.score == 10.0
+
+
+def test_full_pipeline_crops_and_grades_a_low_resolution_perspective_photo():
+    sheet = generate_sample_submission_50_mcq(
+        answers=EXPECTED,
+        sbd="123456",
+        exam_code="789",
+    )
+    height, width = sheet.shape[:2]
+    source = np.float32(
+        [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]]
+    )
+    destination = np.float32(
+        [[70, 45], [width + 100, 10], [width + 130, height + 180], [20, height + 140]]
+    )
+    photo = cv2.warpPerspective(
+        sheet,
+        cv2.getPerspectiveTransform(source, destination),
+        (width + 200, height + 200),
+        borderValue=(80, 80, 80),
+    )
+    photo = cv2.resize(photo, None, fx=0.4, fy=0.4, interpolation=cv2.INTER_AREA)
+    photo = cv2.GaussianBlur(photo, (3, 3), 0.7)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        image_path = os.path.join(output_dir, "phone_photo.png")
+        assert imwrite_utf8(image_path, photo)
+        submission = process_single_submission(
+            image_path,
+            EXPECTED,
+            annotated_dir=output_dir,
+            total_questions=50,
+        )
+        flattened = imread_utf8(submission.processed_image_path)
+
+    assert submission.status == "Thành công", submission.error_message
+    assert submission.correct_count == 50
+    assert submission.score == 10.0
+    assert submission.processed_image_path
+    assert flattened is not None
+    assert flattened.shape[:2] == (STANDARD_HEIGHT, STANDARD_WIDTH)
+
+
+def test_full_pipeline_flattens_and_scans_a_rotated_low_resolution_import():
+    sheet = generate_sample_submission_50_mcq(
+        answers=EXPECTED,
+        sbd="123456",
+        exam_code="789",
+    )
+    photo = cv2.resize(sheet, None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
+    photo = cv2.rotate(photo, cv2.ROTATE_180)
+
+    with tempfile.TemporaryDirectory() as output_dir:
+        image_path = os.path.join(output_dir, "rotated_phone_photo.png")
+        assert imwrite_utf8(image_path, photo)
+        submission = process_single_submission(
+            image_path,
+            EXPECTED,
+            annotated_dir=output_dir,
+            total_questions=50,
+        )
+        flattened = imread_utf8(submission.processed_image_path)
+
+    assert submission.status == "Thành công", submission.error_message
+    assert submission.correct_count == 50
+    assert submission.score == 10.0
+    assert submission.processed_image_path
+    assert flattened is not None
+    assert flattened.shape[:2] == (STANDARD_HEIGHT, STANDARD_WIDTH)
+
+
+@pytest.mark.parametrize(
+    "rotation",
+    [
+        cv2.ROTATE_90_CLOCKWISE,
+        cv2.ROTATE_180,
+        cv2.ROTATE_90_COUNTERCLOCKWISE,
+    ],
+)
+def test_rotated_photos_are_oriented_from_the_active_layout(rotation):
+    sheet = generate_sample_submission_50_mcq(
+        answers=EXPECTED,
+        sbd="123456",
+        exam_code="789",
+    )
+    result = _read_answers(cv2.rotate(sheet, rotation))
+    assert result["answers"] == EXPECTED
+    assert result["sbd"] == "123456"
+    assert result["exam_code"] == "789"
+
+
+def test_perspective_low_light_and_shadow_keep_the_answers_readable():
+    sheet = generate_sample_submission_50_mcq(
+        answers=EXPECTED,
+        sbd="123456",
+        exam_code="789",
+    )
+    height, width = sheet.shape[:2]
+    source = np.float32([[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]])
+    destination = np.float32(
+        [[130, 100], [width + 20, 20], [width + 90, height + 130], [30, height + 40]]
+    )
+    transform = cv2.getPerspectiveTransform(source, destination)
+    photo = cv2.warpPerspective(
+        sheet,
+        transform,
+        (width + 220, height + 220),
+        borderValue=(75, 75, 75),
+    )
+    illumination = np.linspace(0.62, 0.9, photo.shape[1], dtype=np.float32)[None, :, None]
+    photo = np.clip(photo.astype(np.float32) * illumination + 24, 0, 255).astype(np.uint8)
+    shadow = np.zeros(photo.shape[:2], dtype=np.uint8)
+    cv2.ellipse(
+        shadow,
+        (photo.shape[1] // 2, photo.shape[0] // 2),
+        (photo.shape[1] // 5, photo.shape[0] // 2),
+        -12,
+        0,
+        360,
+        80,
+        -1,
+    )
+    photo = cv2.subtract(photo, cv2.merge([shadow, shadow, shadow]))
+
+    result = _read_answers(photo)
+    accuracy = sum(result["answers"][q] == EXPECTED[q] for q in EXPECTED) / 50
+    assert accuracy >= 0.98
+    assert result["sbd"] == "123456"
+    assert result["exam_code"] == "789"
+
+
+def test_low_resolution_photo_is_cropped_flat_and_still_matches_the_layout():
+    sheet = generate_sample_submission_50_mcq(
+        answers=EXPECTED,
+        sbd="123456",
+        exam_code="789",
+    )
+    photo = cv2.resize(sheet, (768, 1024), interpolation=cv2.INTER_AREA)
+    photo = cv2.GaussianBlur(photo, (3, 3), 0.7)
+
+    result = _read_answers(photo)
+
+    assert result["answers"] == EXPECTED
+    assert result["sbd"] == "123456"
+    assert result["exam_code"] == "789"
+
+
+def test_faint_mark_is_detected_after_warping_a_photo():
+    sheet = generate_50_mcq_template()
+    success, aligned, message = align_paper(sheet)
+    assert success, message
+    assert aligned is not None
+    y, centers = QUESTION_COORDS[27]
+    cv2.circle(aligned, (centers[3], y), 5, (220, 220, 220), -1)
+
+    result = extract_all_data(aligned)
+
+    assert result["layout_source"] == "FormTHPT50"
+    assert result["answers"][27] == "D"
+
+
+def test_two_filled_bubbles_are_still_reported_as_multiple():
+    sheet = generate_sample_submission_50_mcq(answers={1: ["A", "B"]})
+    success, aligned, message = align_paper(sheet)
+    assert success, message
+    assert aligned is not None
+
+    result = extract_all_data(aligned)
+
+    assert result["answers"][1] == ["A", "B"]
+    assert result["needs_review"]
+
+
+def test_overlay_center_tracks_a_printed_bubble_shifted_by_local_warp():
+    gray = np.full((100, 100), 255, dtype=np.uint8)
+    expected_center = (53, 45)
+    cv2.circle(gray, expected_center, 16, 120, 2)
+
+    center, radius = _locate_bubble_circle(gray, 50, 50)
+
+    assert abs(center[0] - expected_center[0]) <= 1
+    assert abs(center[1] - expected_center[1]) <= 1
+    assert 15 <= radius <= 17
+
+
+def test_unrecognized_image_is_rejected_without_using_fallback_coordinates():
+    image = np.full((STANDARD_HEIGHT, STANDARD_WIDTH, 3), 255, dtype=np.uint8)
+    result = extract_all_data(image, total_questions=40)
+    assert result["layout_source"] == "unrecognized"
+    assert result["coords_map"] == {}
+    assert all(answer is None for answer in result["answers"].values())
+
+
+def test_marker_detection_ignores_large_rectangular_clutter():
+    image = np.full((1024, 768), 255, dtype=np.uint8)
+    expected = np.float32([[98, 109], [626, 105], [647, 919], [73, 909]])
+    for x, y in expected:
+        cv2.rectangle(image, (int(x - 8), int(y - 8)), (int(x + 8), int(y + 8)), 0, -1)
+    for x, y in ((32, 747), (679, 279), (706, 787), (63, 985)):
+        cv2.rectangle(image, (x - 20, y - 15), (x + 20, y + 15), 0, -1)
+
+    marker_quad = find_fiducial_markers(image)
+
+    assert marker_quad is not None
+    np.testing.assert_allclose(marker_quad, expected, atol=1)
+
+
+def test_marker_selection_ignores_background_square_that_expands_the_quad():
+    expected = np.float32(
+        [[242.5, 272.5], [1562.5, 261.5], [1617.0, 2298.5], [181.0, 2271.5]]
+    )
+    candidates = [
+        {
+            "center": tuple(point),
+            "area": 800.0,
+            "bbox": (int(point[0] - 15), int(point[1] - 15), 30, 30),
+        }
+        for point in expected
+    ]
+    candidates.append(
+        {
+            "center": (43.0, 336.0),
+            "area": 431.0,
+            "bbox": (28, 320, 30, 32),
+        }
+    )
+
+    marker_quad = _select_marker_quad(candidates, 1920, 2560)
+
+    assert marker_quad is not None
+    np.testing.assert_allclose(marker_quad, expected, atol=1)
+
+
+def test_clean_processing_stays_under_two_seconds():
+    sheet = generate_sample_submission_50_mcq(answers=EXPECTED)
+    started = time.perf_counter()
+    result = _read_answers(sheet)
+    assert result["answers"] == EXPECTED
+    assert time.perf_counter() - started < 2.0

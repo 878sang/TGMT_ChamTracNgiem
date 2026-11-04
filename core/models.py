@@ -48,6 +48,7 @@ class Submission:
     student_name: str = ""
     exam_code: str = "101"              # Mã đề thi (nếu có trên phiếu)
     image_path: str = ""                # Đường dẫn file ảnh gốc
+    processed_image_path: str = ""      # Đường dẫn phiếu đã cắt và căn phẳng
     annotated_image_path: str = ""      # Đường dẫn ảnh đã vẽ overlay kết quả
     
     # Kết quả nhận diện OMR: {1: 'A', 2: 'B', 3: None (trống), 4: ['A', 'C'] (tô trùng)}

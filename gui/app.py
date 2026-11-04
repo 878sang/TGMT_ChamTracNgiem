@@ -1,8 +1,8 @@
 """
 Module: app.py
-Giao diện người dùng Desktop (CustomTkinter) cho Hệ thống nhận diện & chấm phiếu trắc nghiệm 50 câu:
+Giao diện người dùng Desktop (CustomTkinter) cho hệ thống chấm phiếu FormTHPT50:
   - Bước 1: Tải phiếu lên (Quản lý ảnh phiếu - Chức năng 1)
-  - Bước 2: Đọc phiếu & Chấm điểm (Tiền xử lý, Nhận diện OMR 50 câu & Xử lý theo lô - Chức năng 2, 3, 4)
+  - Bước 2: Đọc phiếu & Chấm điểm (Tiền xử lý, Nhận diện OMR & Xử lý theo lô - Chức năng 2, 3, 4)
   - Bước 3: Xuất kết quả (Bảng điểm, Ảnh kết quả trực quan & Xuất file Excel - Chức năng 5)
 """
 
@@ -28,7 +28,7 @@ from core.cv_utils import imread_utf8, imwrite_utf8
 from core.grading_engine import grade_submission, parse_answer_string, generate_sample_answer_key
 from core.exam_processor import process_single_submission, scan_answer_key_from_image
 from core.excel_exporter import export_exam_results_to_excel
-from core.sheet_generator import generate_all_samples, generate_50_mcq_template
+from core.sheet_generator import generate_50_mcq_template
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -38,7 +38,7 @@ class OMRGradingApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Phần Mềm Nhận Diện & Chấm Phiếu Trắc Nghiệm THPT (50 Câu) - OpenCV")
+        self.title("Phần Mềm Chấm Phiếu FormTHPT50 (1-50 Câu) - OpenCV")
         self.geometry("1300x820")
         self.minsize(1100, 700)
 
@@ -46,6 +46,7 @@ class OMRGradingApp(ctk.CTk):
         self.image_files = []
         self.image_validation_cache = {}
         self.answer_key = {}
+        self.total_questions = 50
         self.submissions = []
         self.is_processing = False
         self.selected_sub = None
@@ -82,7 +83,7 @@ class OMRGradingApp(ctk.CTk):
 
         title_lbl = ctk.CTkLabel(
             header_frame, 
-            text="HỆ THỐNG NHẬN DIỆN VÀ CHẤM PHIẾU TRẮC NGHIỆM THPT (50 CÂU)", 
+            text="HỆ THỐNG NHẬN DIỆN VÀ CHẤM PHIẾU FORMTHPT50 (1-50 CÂU)",
             font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold")
         )
         title_lbl.pack(side="left", padx=20, pady=(8, 0))
@@ -110,7 +111,7 @@ class OMRGradingApp(ctk.CTk):
 
         self.tab_batch = self.tabview.add("  📋 Quản lý ảnh & Chấm bài theo lô  ")
         self.tab_detail = self.tabview.add("  🔍 Xem chi tiết bài làm & Ảnh kết quả  ")
-        self.tab_template = self.tabview.add("  📄 Mẫu phiếu trắng 50 câu & Hướng dẫn  ")
+        self.tab_template = self.tabview.add("  📄 Mẫu phiếu trắng & Hướng dẫn  ")
 
         self._build_tab_batch()
         self._build_tab_detail()
@@ -120,7 +121,7 @@ class OMRGradingApp(ctk.CTk):
     # TAB 1: QUẢN LÝ ẢNH & CHẤM BÀI THEO LÔ
     # =========================================================================
     def _build_tab_batch(self):
-        # --- Khung trên: Thiết lập đáp án chuẩn 50 câu ---
+        # --- Khung trên: Chọn số câu và thiết lập đáp án chuẩn ---
         top_ctrl_box = ctk.CTkFrame(self.tab_batch)
         top_ctrl_box.pack(fill="x", padx=10, pady=(6, 8))
 
@@ -128,14 +129,40 @@ class OMRGradingApp(ctk.CTk):
         row_ctrl.pack(fill="x", padx=12, pady=(8, 4))
 
         ctk.CTkLabel(
-            row_ctrl, 
-            text="Đáp án chuẩn 50 câu:", 
+            row_ctrl,
+            text="Số câu (1-50):",
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold")
-        ).pack(side="left", padx=(0, 10))
+        ).pack(side="left", padx=(0, 5))
+
+        self.entry_question_count = ctk.CTkEntry(
+            row_ctrl, width=58, height=32, justify="center"
+        )
+        self.entry_question_count.insert(0, str(self.total_questions))
+        self.entry_question_count.bind(
+            "<Return>",
+            lambda _event: self._on_question_count_changed(self.entry_question_count.get()),
+        )
+        self.entry_question_count.pack(side="left", padx=(0, 4))
+
+        self.btn_apply_question_count = ctk.CTkButton(
+            row_ctrl,
+            text="Áp dụng",
+            width=70,
+            height=32,
+            command=lambda: self._on_question_count_changed(self.entry_question_count.get()),
+        )
+        self.btn_apply_question_count.pack(side="left", padx=(0, 10))
+
+        self.lbl_answer_key_title = ctk.CTkLabel(
+            row_ctrl,
+            text="Đáp án chuẩn:",
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold")
+        )
+        self.lbl_answer_key_title.pack(side="left", padx=(0, 8))
 
         self.entry_key = ctk.CTkEntry(
             row_ctrl, 
-            placeholder_text="Nhập chuỗi đáp án 50 câu (VD: 'A B C D...' hoặc 'ABCD...' hoặc '1:A 2:B...')", 
+            placeholder_text="Nhập chuỗi đáp án (VD: 'A B C D...' hoặc '1:A 2:B...')",
             height=32
         )
         self.entry_key.pack(side="left", fill="x", expand=True, padx=(0, 8))
@@ -174,7 +201,7 @@ class OMRGradingApp(ctk.CTk):
         # Nhãn hiển thị tóm tắt đáp án chuẩn
         self.lbl_key_summary = ctk.CTkLabel(
             top_ctrl_box, 
-            text="Đáp án hiện tại: 50 câu (Chưa thiết lập)", 
+            text=f"Đáp án hiện tại: 0/{self.total_questions} câu (Chưa thiết lập)",
             font=ctk.CTkFont(family="Consolas", size=11),
             text_color="#2E7D32"
         )
@@ -205,11 +232,6 @@ class OMRGradingApp(ctk.CTk):
 
         ctk.CTkButton(
             btn_row1, text="📁 Tải folder...", width=105, height=30, command=self._action_add_directory
-        ).pack(side="left", padx=4)
-
-        ctk.CTkButton(
-            btn_row1, text="⚡ Nạp 7 bài mẫu", width=120, height=30,
-            fg_color="#D97724", hover_color="#B55E15", command=self._action_load_sample_dataset
         ).pack(side="left", padx=4)
 
         btn_row2 = ctk.CTkFrame(left_box, fg_color="transparent")
@@ -291,7 +313,7 @@ class OMRGradingApp(ctk.CTk):
 
         self.btn_start_grading = ctk.CTkButton(
             ctl_bar, 
-            text="▶ ĐỌC PHIẾU & CHẤM ĐIỂM", 
+            text=f"▶ BẮT ĐẦU CHẤM BÀI ({self.total_questions} CÂU)",
             font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
             height=38,
             fg_color="#1E824C",
@@ -337,7 +359,7 @@ class OMRGradingApp(ctk.CTk):
         self.tree_results.heading("StudentID", text="Mã học sinh")
         self.tree_results.heading("FileName", text="Tên file ảnh")
         self.tree_results.heading("Score", text="Điểm /10")
-        self.tree_results.heading("Correct", text="Đúng /50")
+        self.tree_results.heading("Correct", text=f"Đúng /{self.total_questions}")
         self.tree_results.heading("Wrong", text="Sai")
         self.tree_results.heading("Blank", text="Trống")
         self.tree_results.heading("Status", text="Trạng thái")
@@ -410,7 +432,10 @@ class OMRGradingApp(ctk.CTk):
         table_box.pack(side="left", fill="both", expand=False, padx=(0, 5))
         table_box.pack_propagate(False)
 
-        ctk.CTkLabel(table_box, text="Chi tiết 50 câu hỏi", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(8, 4))
+        self.lbl_detail_questions = ctk.CTkLabel(
+            table_box, text=f"Chi tiết {self.total_questions} câu hỏi", font=ctk.CTkFont(weight="bold")
+        )
+        self.lbl_detail_questions.pack(anchor="w", padx=10, pady=(8, 4))
 
         tree_det_frame = tk.Frame(table_box, bg="#FFFFFF")
         tree_det_frame.pack(fill="both", expand=True, padx=10, pady=5)
@@ -446,7 +471,7 @@ class OMRGradingApp(ctk.CTk):
         self.lbl_image_view.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
     # =========================================================================
-    # TAB 3: MẪU PHIẾU TRẮNG 50 CÂU & HƯỚNG DẪN
+    # TAB 3: MẪU PHIẾU TRẮNG & HƯỚNG DẪN
     # =========================================================================
     def _build_tab_template(self):
         box = ctk.CTkFrame(self.tab_template)
@@ -454,16 +479,18 @@ class OMRGradingApp(ctk.CTk):
 
         ctk.CTkLabel(
             box, 
-            text="MẪU PHIẾU THI TRẮC NGHIỆM THPT (50 CÂU) & QUY TRÌNH SỬ DỤNG", 
+            text="MẪU PHIẾU THI TRẮC NGHIỆM THPT (1-50 CÂU) & QUY TRÌNH SỬ DỤNG",
             font=ctk.CTkFont(family="Segoe UI", size=15, weight="bold")
         ).pack(anchor="w", padx=20, pady=(15, 10))
 
         intro_text = (
-            "Phần mềm được thiết kế chuyên biệt cho phiếu trắc nghiệm 50 câu chuẩn THPT:\n"
+            "Phần mềm hỗ trợ chấm số câu tùy chọn từ 1 đến 50:\n"
             "  • Thuật toán Thị giác máy tính (OpenCV) tự động nhận diện và nắn phẳng phối cảnh (Perspective Transform).\n"
-            "  • Tự động phân tích mật độ pixel đen để bóc tách đáp án 50 câu, Số Báo Danh và Mã Đề Thi.\n"
+            "  • Ảnh chụp ngang được tự xoay về khổ dọc khi phát hiện đủ marker định vị hoặc viền phiếu.\n"
+            "  • Chỉ hỗ trợ phiếu FormTHPT50 trong PDF; có thể chấm số câu tùy chọn từ 1 đến 50.\n"
+            "  • Tự động đọc đáp án, SBD 6 số và mã đề 3 số theo mẫu phiếu.\n"
             "  • Tự động phát hiện câu bỏ trống, câu tô trùng nhiều đáp án, cảnh báo tẩy lem nhem.\n"
-            "  • Chấm điểm chuẩn xác theo thang 10.0 (mỗi câu đúng = 0.2 điểm) và xuất file Excel 3 Sheet đầy đủ."
+            "  • Chấm điểm theo thang 10.0 và xuất file Excel 3 Sheet; chọn đúng số câu trước khi nạp đáp án."
         )
         ctk.CTkLabel(box, text=intro_text, font=ctk.CTkFont(family="Segoe UI", size=12), justify="left").pack(anchor="w", padx=20, pady=5)
 
@@ -474,11 +501,6 @@ class OMRGradingApp(ctk.CTk):
             btn_frame, text="🖨️ Xuất mẫu phiếu trắng 50 câu (PNG)", height=36, command=self._export_blank_template
         ).pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(
-            btn_frame, text="⚡ Sinh lại 7 bài làm mẫu kiểm thử", height=36,
-            fg_color="#D97724", hover_color="#B55E15", command=self._regenerate_samples
-        ).pack(side="left", padx=10)
-
         ctk.CTkLabel(
             box, text="Quy trình sử dụng gồm 3 bước đơn giản:", 
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold")
@@ -487,7 +509,6 @@ class OMRGradingApp(ctk.CTk):
         steps_text = (
             "1. BƯỚC 1 - TẢI PHIẾU LÊN:\n"
             "   Bấm '➕ Tải ảnh phiếu...' hoặc '📁 Tải folder...' để chọn các ảnh phiếu cần chấm (hỗ trợ JPG, PNG).\n"
-            "   (Có thể bấm '⚡ Nạp 7 bài mẫu' để thử nghiệm ngay lập tức).\n\n"
             "2. BƯỚC 2 - ĐỌC PHIẾU & CHẤM ĐIỂM:\n"
             "   Bấm nút '▶ ĐỌC PHIẾU & CHẤM ĐIỂM'. Hệ thống sẽ tự động xử lý tuần tự từng ảnh, đọc các câu trả lời,\n"
             "   so sánh với đáp án chuẩn và tính điểm.\n\n"
@@ -504,13 +525,14 @@ class OMRGradingApp(ctk.CTk):
     def _action_add_images(self):
         files = filedialog.askopenfilenames(
             title="Chọn các ảnh phiếu trả lời",
-            filetypes=[("Ảnh phiếu thi", "*.jpg;*.jpeg;*.png"), ("Tất cả file", "*.*")]
+            filetypes=[("Ảnh phiếu thi", "*.jpg;*.jpeg;*.jpe;*.png"), ("Tất cả file", "*.*")]
         )
         if not files:
             return
         new_count = 0
         for f in files:
             norm_path = os.path.abspath(f)
+            self.image_validation_cache.pop(norm_path, None)
             if norm_path not in self.image_files:
                 self.image_files.append(norm_path)
                 new_count += 1
@@ -522,13 +544,14 @@ class OMRGradingApp(ctk.CTk):
         dir_path = filedialog.askdirectory(title="Chọn thư mục chứa ảnh phiếu thi")
         if not dir_path:
             return
-        patterns = ["*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"]
+        patterns = ["*.jpg", "*.jpeg", "*.jpe", "*.png", "*.JPG", "*.JPEG", "*.JPE", "*.PNG"]
         found = []
         for pat in patterns:
             found.extend(glob.glob(os.path.join(dir_path, pat)))
         new_count = 0
         for f in sorted(found):
             norm_path = os.path.abspath(f)
+            self.image_validation_cache.pop(norm_path, None)
             if norm_path not in self.image_files:
                 self.image_files.append(norm_path)
                 new_count += 1
@@ -610,7 +633,7 @@ class OMRGradingApp(ctk.CTk):
             messagebox.showwarning("Chưa có hình ảnh", "Camera chưa lấy được khung hình. Vui lòng thử lại.")
             return
 
-        capture_dir = os.path.join(PROJECT_ROOT, "dataset", "camera_captures")
+        capture_dir = os.path.join(PROJECT_ROOT, "data", "camera_captures")
         os.makedirs(capture_dir, exist_ok=True)
         filename = f"camera_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
         save_path = os.path.join(capture_dir, filename)
@@ -638,20 +661,6 @@ class OMRGradingApp(ctk.CTk):
             self.camera_window = None
         self.camera_frame = None
 
-    def _action_load_sample_dataset(self):
-        sample_dir = os.path.join(PROJECT_ROOT, "dataset", "sample_submissions_50cau")
-        if not os.path.exists(sample_dir):
-            generate_all_samples()
-
-        patterns = ["*.jpg", "*.jpeg", "*.png"]
-        found = []
-        for pat in patterns:
-            found.extend(glob.glob(os.path.join(sample_dir, pat)))
-
-        self.image_files = [os.path.abspath(f) for f in sorted(found)]
-        self._refresh_image_list()
-        self._update_progress_status(f"Đã nạp {len(self.image_files)} ảnh bài làm mẫu 50 câu.")
-
     def _action_remove_selected_image(self):
         selected_items = self.tree_images.selection()
         if not selected_items:
@@ -665,6 +674,7 @@ class OMRGradingApp(ctk.CTk):
                 for path in list(self.image_files):
                     if os.path.basename(path) == fname:
                         self.image_files.remove(path)
+                        self.image_validation_cache.pop(path, None)
                         removed += 1
                         break
         self._refresh_image_list()
@@ -675,6 +685,7 @@ class OMRGradingApp(ctk.CTk):
             return
         if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn xóa toàn bộ ảnh khỏi danh sách?"):
             self.image_files.clear()
+            self.image_validation_cache.clear()
             self._refresh_image_list()
             self._update_progress_status("Đã làm trống danh sách ảnh.")
 
@@ -705,7 +716,7 @@ class OMRGradingApp(ctk.CTk):
         if not os.path.exists(path):
             return False, "--", "Không tồn tại"
         ext = os.path.splitext(path)[1].lower()
-        if ext not in [".jpg", ".jpeg", ".png"]:
+        if ext not in [".jpg", ".jpeg", ".jpe", ".png"]:
             return False, "--", "Định dạng lạ"
         try:
             img = imread_utf8(path)
@@ -719,31 +730,84 @@ class OMRGradingApp(ctk.CTk):
     # =========================================================================
     # LOGIC CẤU HÌNH ĐÁP ÁN
     # =========================================================================
+    def _on_question_count_changed(self, value: str):
+        try:
+            question_count = int(value.strip())
+        except ValueError:
+            messagebox.showerror("Số câu không hợp lệ", "Vui lòng nhập số nguyên từ 1 đến 50.")
+            self.entry_question_count.delete(0, "end")
+            self.entry_question_count.insert(0, str(self.total_questions))
+            return
+
+        if not 1 <= question_count <= 50:
+            messagebox.showerror("Số câu không hợp lệ", "Số câu phải nằm trong khoảng từ 1 đến 50.")
+            self.entry_question_count.delete(0, "end")
+            self.entry_question_count.insert(0, str(self.total_questions))
+            return
+
+        if question_count == self.total_questions:
+            self.entry_question_count.delete(0, "end")
+            self.entry_question_count.insert(0, str(self.total_questions))
+            return
+
+        self.total_questions = question_count
+        self.entry_question_count.delete(0, "end")
+        self.entry_question_count.insert(0, str(question_count))
+        self.answer_key = {}
+        self.entry_key.delete(0, "end")
+        self._refresh_answer_key_display()
+        self.btn_start_grading.configure(text=f"▶ BẮT ĐẦU CHẤM BÀI ({question_count} CÂU)")
+        self.tree_results.delete(*self.tree_results.get_children())
+        self.tree_details.delete(*self.tree_details.get_children())
+        self.submissions.clear()
+        self.selected_sub = None
+        self.card_total.configure(text="0")
+        self.card_success.configure(text="0")
+        self.card_warning.configure(text="0")
+        self.card_error.configure(text="0")
+        self.progress_bar.set(0.0)
+        self.tree_results.heading("Correct", text=f"Đúng /{question_count}")
+        self.lbl_detail_questions.configure(text=f"Chi tiết {question_count} câu hỏi")
+        self.combo_students.configure(values=["Chưa có kết quả nào"])
+        self.combo_students.set("Chưa có kết quả nào")
+        self.lbl_detail_score.configure(text="Điểm: -- / 10.0  |  Xếp loại: --")
+        self.lbl_image_view.configure(image=None, text="Chưa có ảnh được chọn")
+        self.lbl_image_view.image = None
+        self._update_progress_status(
+            f"Đã chuyển sang phiếu {question_count} câu. Hãy nạp đáp án chuẩn mới."
+        )
+
     def _apply_answer_key_from_entry(self):
         text = self.entry_key.get().strip()
         if not text:
             messagebox.showwarning("Thông báo", "Vui lòng nhập chuỗi đáp án chuẩn.")
             return
 
-        parsed = parse_answer_string(text, max_q=50)
+        parsed = parse_answer_string(text, max_q=self.total_questions)
         if not parsed:
             messagebox.showerror("Lỗi", "Không tìm thấy đáp án hợp lệ (A, B, C, D) trong chuỗi vừa nhập.")
             return
 
-        if len(parsed) != 50 or any(question not in parsed for question in range(1, 51)):
+        if len(parsed) != self.total_questions or any(
+            question not in parsed for question in range(1, self.total_questions + 1)
+        ):
             messagebox.showerror(
                 "Answer key incomplete",
-                f"The answer key must contain exactly 50 questions (found {len(parsed)}/50).",
+                f"The answer key must contain exactly {self.total_questions} questions "
+                f"(found {len(parsed)}/{self.total_questions}).",
             )
             return
 
         self.answer_key = parsed
         self._refresh_answer_key_display()
-        messagebox.showinfo("Thành công", f"Đã lưu thành công đáp án chuẩn cho {len(parsed)}/50 câu hỏi!")
+        messagebox.showinfo(
+            "Thành công",
+            f"Đã lưu thành công đáp án chuẩn cho {len(parsed)}/{self.total_questions} câu hỏi!"
+        )
 
     def _set_sample_answer_key(self):
-        self.answer_key = generate_sample_answer_key(50)
-        sample_str = " ".join([self.answer_key[i] for i in range(1, 51)])
+        self.answer_key = generate_sample_answer_key(self.total_questions)
+        sample_str = " ".join([self.answer_key[i] for i in range(1, self.total_questions + 1)])
         self.entry_key.delete(0, "end")
         self.entry_key.insert(0, sample_str)
         self._refresh_answer_key_display()
@@ -762,7 +826,7 @@ class OMRGradingApp(ctk.CTk):
             if ext == ".txt":
                 with open(filepath, "r", encoding="utf-8") as f:
                     content = f.read()
-                parsed = parse_answer_string(content, max_q=50)
+                parsed = parse_answer_string(content, max_q=self.total_questions)
             elif ext == ".xlsx":
                 import openpyxl
                 wb = openpyxl.load_workbook(filepath, data_only=True)
@@ -774,18 +838,26 @@ class OMRGradingApp(ctk.CTk):
                     c1, c2 = str(row[0]).strip(), str(row[1]).strip().upper()
                     if c1.isdigit() and c2 in ['A', 'B', 'C', 'D']:
                         q = int(c1)
-                        if 1 <= q <= 50:
+                        if 1 <= q <= self.total_questions:
                             parsed[q] = c2
 
-            if len(parsed) == 50 and all(question in parsed for question in range(1, 51)):
+            if len(parsed) == self.total_questions and all(
+                question in parsed for question in range(1, self.total_questions + 1)
+            ):
                 self.answer_key = parsed
-                sample_str = " ".join([self.answer_key[i] for i in range(1, 51)])
+                sample_str = " ".join([self.answer_key[i] for i in range(1, self.total_questions + 1)])
                 self.entry_key.delete(0, "end")
                 self.entry_key.insert(0, sample_str)
                 self._refresh_answer_key_display()
-                messagebox.showinfo("Nạp đáp án", f"Đã nạp thành công {len(parsed)} đáp án từ file!")
+                messagebox.showinfo(
+                    "Nạp đáp án",
+                    f"Đã nạp thành công {len(parsed)}/{self.total_questions} đáp án từ file!"
+                )
             else:
-                messagebox.showerror("Lỗi", "Không tìm thấy cấu trúc đáp án hợp lệ trong file.")
+                messagebox.showerror(
+                    "Lỗi",
+                    f"File phải chứa đủ đáp án cho {self.total_questions} câu."
+                )
         except Exception as e:
             messagebox.showerror("Lỗi", f"Không thể đọc file: {e}")
 
@@ -793,7 +865,7 @@ class OMRGradingApp(ctk.CTk):
         total = len(self.answer_key)
         first_10 = " ".join([f"{i}:{self.answer_key.get(i, '?')}" for i in range(1, min(11, total + 1))])
         self.lbl_key_summary.configure(
-            text=f"Đáp án chuẩn hiện tại: Đã nạp {total}/50 câu | 10 câu đầu: [{first_10} ...]"
+            text=f"Đáp án chuẩn hiện tại: Đã nạp {total}/{self.total_questions} câu | 10 câu đầu: [{first_10} ...]"
         )
 
     # =========================================================================
@@ -806,11 +878,18 @@ class OMRGradingApp(ctk.CTk):
         if not self.image_files:
             messagebox.showwarning("Thông báo", "Chưa có ảnh nào trong danh sách. Vui lòng bấm 'Thêm ảnh' hoặc 'Nạp ảnh mẫu'!")
             return
-        if len(self.answer_key) != 50 or any(question not in self.answer_key for question in range(1, 51)):
-            messagebox.showwarning("Thông báo", "Vui lòng thiết lập đáp án chuẩn trước khi chấm.")
+        if len(self.answer_key) != self.total_questions or any(
+            question not in self.answer_key for question in range(1, self.total_questions + 1)
+        ):
+            messagebox.showwarning(
+                "Thông báo",
+                f"Vui lòng thiết lập đủ đáp án chuẩn cho {self.total_questions} câu trước khi chấm."
+            )
             return
 
         self.is_processing = True
+        self.entry_question_count.configure(state="disabled")
+        self.btn_apply_question_count.configure(state="disabled")
         self.btn_start_grading.configure(state="disabled", text="⏳ ĐANG XỬ LÝ HÀNG LOẠT...")
         self.submissions.clear()
 
@@ -835,7 +914,8 @@ class OMRGradingApp(ctk.CTk):
             try:
                 sub = process_single_submission(
                     image_path=img_path,
-                    answer_key=self.answer_key
+                    answer_key=self.answer_key,
+                    total_questions=self.total_questions,
                 )
             except Exception as e:
                 sub = Submission(
@@ -870,13 +950,18 @@ class OMRGradingApp(ctk.CTk):
         
         self.tree_results.insert("", "end", values=(
             stt, st_id, fname, score_str,
-            f"{sub.correct_count}/50", sub.wrong_count, sub.blank_count,
+            f"{sub.correct_count}/{self.total_questions}", sub.wrong_count, sub.blank_count,
             sub.status
         ))
 
     def _finish_batch_grading(self, total: int, success: int, warning: int, error: int):
         self.is_processing = False
-        self.btn_start_grading.configure(state="normal", text="▶ BẮT ĐẦU CHẤM BÀI HÀNG LOẠT (50 CÂU)")
+        self.entry_question_count.configure(state="normal")
+        self.btn_apply_question_count.configure(state="normal")
+        self.btn_start_grading.configure(
+            state="normal",
+            text=f"▶ BẮT ĐẦU CHẤM BÀI HÀNG LOẠT ({self.total_questions} CÂU)"
+        )
         self.progress_bar.set(1.0)
         self.lbl_progress.configure(text=f"Đã hoàn thành {total} bài!")
 
@@ -893,7 +978,7 @@ class OMRGradingApp(ctk.CTk):
 
         messagebox.showinfo(
             "Hoàn thành chấm bài",
-            f"Đã hoàn tất chấm hàng loạt {total} bài thi 50 câu:\n"
+            f"Đã hoàn tất chấm hàng loạt {total} bài thi {self.total_questions} câu:\n"
             f"  • Thành công: {success} bài\n"
             f"  • Cần kiểm tra: {warning} bài\n"
             f"  • Bị lỗi: {error} bài"
@@ -916,7 +1001,7 @@ class OMRGradingApp(ctk.CTk):
             submissions=self.submissions,
             answer_key=self.answer_key,
             output_filepath=filepath,
-            exam_title="BÁO CÁO KẾT QUẢ THI TRẮC NGHIỆM THPT (50 CÂU)"
+            exam_title=f"BÁO CÁO KẾT QUẢ THI TRẮC NGHIỆM THPT ({self.total_questions} CÂU)"
         )
         if ok:
             messagebox.showinfo("Xuất Excel", f"Đã xuất báo cáo kết quả thi thành công:\n{filepath}")
@@ -954,6 +1039,7 @@ class OMRGradingApp(ctk.CTk):
                 break
 
     def _display_submission_detail(self, sub: Submission):
+        question_count = len(sub.details)
         if sub.status == "Lỗi":
             self.lbl_detail_score.configure(
                 text=f"[{sub.student_id}]  TRẠNG THÁI: LỖI  |  {sub.error_message}", text_color="#DC2626"
@@ -962,7 +1048,7 @@ class OMRGradingApp(ctk.CTk):
             rank = "Giỏi" if sub.score >= 8.0 else ("Khá" if sub.score >= 6.5 else ("Trung bình" if sub.score >= 5.0 else "Yếu"))
             text_stat = (
                 f"[{sub.student_id}]  ĐIỂM: {sub.score:.2f} / 10.0  |  "
-                f"Đúng: {sub.correct_count}/50  |  Sai: {sub.wrong_count}  |  Trống: {sub.blank_count}  |  Loại: {rank}"
+                f"Đúng: {sub.correct_count}/{question_count}  |  Sai: {sub.wrong_count}  |  Trống: {sub.blank_count}  |  Loại: {rank}"
             )
             color = "#1E824C" if sub.status == "Thành công" else "#D97724"
             self.lbl_detail_score.configure(text=text_stat, text_color=color)
@@ -971,7 +1057,7 @@ class OMRGradingApp(ctk.CTk):
             self.tree_details.delete(item)
 
         details = sub.details
-        for q in range(1, 51):
+        for q in range(1, question_count + 1):
             key = self.answer_key.get(q, "")
             det = details.get(q, {})
             st_ans = det.get("student", "-")
@@ -986,7 +1072,18 @@ class OMRGradingApp(ctk.CTk):
 
             self.tree_details.insert("", "end", values=(f"Câu {q:02d}", st_ans, key, res_text))
 
-        target_path = sub.annotated_image_path if (sub.annotated_image_path and os.path.exists(sub.annotated_image_path)) else sub.image_path
+        target_path = next(
+            (
+                path
+                for path in (
+                    sub.annotated_image_path,
+                    sub.processed_image_path,
+                    sub.image_path,
+                )
+                if path and os.path.exists(path)
+            ),
+            "",
+        )
         self._load_and_render_image(target_path)
 
     def _load_and_render_image(self, img_path: str):
@@ -1017,7 +1114,18 @@ class OMRGradingApp(ctk.CTk):
         if not self.selected_sub:
             messagebox.showinfo("Thông báo", "Chưa có bài thi nào được chọn.")
             return
-        target = self.selected_sub.annotated_image_path or self.selected_sub.image_path
+        target = next(
+            (
+                path
+                for path in (
+                    self.selected_sub.annotated_image_path,
+                    self.selected_sub.processed_image_path,
+                    self.selected_sub.image_path,
+                )
+                if path and os.path.exists(path)
+            ),
+            "",
+        )
         if target and os.path.exists(target):
             try:
                 os.startfile(target)
@@ -1042,11 +1150,6 @@ class OMRGradingApp(ctk.CTk):
             messagebox.showinfo("Thành công", f"Đã xuất mẫu phiếu trắng 50 câu ra:\n{save_path}")
         else:
             messagebox.showerror("Lỗi", "Không thể ghi file ảnh.")
-
-    def _regenerate_samples(self):
-        generate_all_samples()
-        messagebox.showinfo("Thành công", "Đã tạo mới bộ dữ liệu mẫu 50 câu!")
-        self._action_load_sample_dataset()
 
     def _toggle_theme(self):
         current = ctk.get_appearance_mode()
