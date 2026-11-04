@@ -16,6 +16,8 @@ from core.layouts import load_layout
 ACTIVE_LAYOUT = load_layout()
 OPTIONS = ("A", "B", "C", "D")
 MARKED_BUBBLE_CONTRAST = 12.0
+ID_MARKED_BUBBLE_CONTRAST = 24.0
+ID_AMBIGUITY_MARGIN = 12.0
 
 
 def _layout_question_coords() -> Dict[int, Tuple[int, List[int]]]:
@@ -149,21 +151,28 @@ def _read_digit_block(
     is_valid = True
     for column in block["columns_data"]:
         contrasts = [
-            _get_bubble_ink_contrast(
-                gray_img,
-                int(round(bubble["x"])),
-                int(round(bubble["y"])),
-                radius=int(round(block["radius"])),
+            max(
+                _get_bubble_ink_contrast(
+                    gray_img,
+                    int(round(bubble["x"])) + dx,
+                    int(round(bubble["y"])) + dy,
+                    radius=int(round(block["radius"])),
+                )
+                for dx in range(-4, 5, 2)
+                for dy in range(-8, 9, 2)
             )
             for bubble in column["digits"]
         ]
         ordered = sorted(contrasts, reverse=True)
         confidence = (ordered[0] - ordered[1]) / 255.0
         confidences.append(confidence)
-        if ordered[0] < 18:
+        # Pencil marks are often lighter than answer marks. Compare against
+        # the local paper and accept a modest contrast while keeping close
+        # competitors ambiguous instead of guessing a digit.
+        if ordered[0] < ID_MARKED_BUBBLE_CONTRAST:
             digits.append("?")
             is_valid = False
-        elif ordered[1] >= 18 and ordered[0] - ordered[1] < 18:
+        elif ordered[1] >= ID_MARKED_BUBBLE_CONTRAST and ordered[0] - ordered[1] < ID_AMBIGUITY_MARGIN:
             digits.append("?")
             is_valid = False
         else:

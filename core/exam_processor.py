@@ -2,7 +2,6 @@
 Module: exam_processor.py
 Cầu nối xử lý trọn gói quy trình Thị giác máy tính cho phiếu FormTHPT50:
   Ảnh chụp phiếu -> Căn chỉnh Warp -> Đọc phiếu -> Chấm điểm -> Vẽ Overlay -> Submission Object
-Hỗ trợ chức năng tự động dò tìm đáp án chuẩn từ ảnh phiếu mẫu (Scan Master Sheet).
 """
 
 import os
@@ -10,7 +9,7 @@ import sys
 import re
 import cv2
 import numpy as np
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Optional, Tuple
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -141,10 +140,11 @@ def process_single_submission(
         submission.answers = omr_data.get("answers", {})
         
         detected_sbd = omr_data.get("sbd", "")
-        if detected_sbd and "?" not in detected_sbd:
+        submission.sbd = detected_sbd
+        if detected_sbd and "?" not in detected_sbd and detected_sbd.isdigit():
             submission.student_id = detected_sbd
             
-        submission.exam_code = omr_data.get("exam_code", "101")
+        submission.exam_code = omr_data.get("exam_code", "")
         submission.needs_review = omr_data.get("needs_review", False)
         submission.warning_message = omr_data.get("warning_message", "")
         coords_map = omr_data.get("coords_map")
@@ -192,33 +192,3 @@ def process_single_submission(
     return submission
 
 
-def scan_answer_key_from_image(
-    image_path: str,
-    total_questions: int = 50
-) -> Tuple[bool, Dict[int, str], str]:
-    """
-    TỰ ĐỘNG DÒ ĐÁP ÁN CHUẨN TỪ ẢNH PHIẾU ĐÁP ÁN MẪU:
-      Giáo viên chụp ảnh phiếu đã tô đáp án chuẩn -> Hệ thống đọc số câu đã chọn (1-50)!
-    """
-    if not 1 <= total_questions <= 50:
-        return False, {}, "Số câu phải nằm trong khoảng từ 1 đến 50."
-    if not os.path.exists(image_path):
-        return False, {}, "File ảnh không tồn tại."
-
-    success, aligned, msg = align_paper(image_path)
-    if not success or aligned is None:
-        return False, {}, f"Không thể căn chỉnh phiếu: {msg}"
-
-    omr_data = extract_all_data(aligned, total_questions=total_questions)
-    detected_answers = omr_data.get("answers", {})
-
-    parsed_key = {}
-    for q in range(1, total_questions + 1):
-        ans = detected_answers.get(q)
-        if isinstance(ans, str) and ans in ['A', 'B', 'C', 'D']:
-            parsed_key[q] = ans
-
-    if len(parsed_key) < min(5, total_questions):
-        return False, {}, "Không tìm thấy đủ đáp án được tô trên ảnh phiếu này."
-
-    return True, parsed_key, f"Đã tự động dò tìm được {len(parsed_key)}/{total_questions} đáp án từ ảnh phiếu mẫu!"

@@ -14,8 +14,8 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import cv2
-import numpy as np
 from PIL import Image
+import pymupdf
 
 import customtkinter as ctk
 
@@ -25,13 +25,14 @@ if PROJECT_ROOT not in sys.path:
 
 from core.models import Submission
 from core.cv_utils import imread_utf8, imwrite_utf8
-from core.grading_engine import grade_submission, parse_answer_string, generate_sample_answer_key
-from core.exam_processor import process_single_submission, scan_answer_key_from_image
+from core.grading_engine import parse_answer_string, generate_sample_answer_key
+from core.exam_processor import process_single_submission
 from core.excel_exporter import export_exam_results_to_excel
 from core.sheet_generator import generate_50_mcq_template
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
+ctk.set_widget_scaling(1.12)
 
 
 class OMRGradingApp(ctk.CTk):
@@ -39,12 +40,13 @@ class OMRGradingApp(ctk.CTk):
         super().__init__()
 
         self.title("Phần Mềm Chấm Phiếu FormTHPT50 (1-50 Câu) - OpenCV")
-        self.geometry("1300x820")
-        self.minsize(1100, 700)
+        self.geometry("1380x860")
+        self.minsize(1180, 740)
 
         # Trạng thái dữ liệu
         self.image_files = []
         self.image_validation_cache = {}
+        self.image_processing_status = {}
         self.answer_key = {}
         self.total_questions = 50
         self.submissions = []
@@ -60,21 +62,21 @@ class OMRGradingApp(ctk.CTk):
         self.style.theme_use("clam")
         self.style.configure(
             "Treeview",
-            font=("Segoe UI", 10),
-            rowheight=26,
+            font=("Segoe UI", 12),
+            rowheight=32,
             background="#FFFFFF",
             fieldbackground="#FFFFFF",
             foreground="#202020"
         )
         self.style.configure(
             "Treeview.Heading",
-            font=("Segoe UI", 10, "bold"),
+            font=("Segoe UI", 12, "bold"),
             background="#2B5B84",
             foreground="#FFFFFF",
             relief="flat"
         )
         self.style.map("Treeview.Heading", background=[('active', '#1F4362')])
-        self.style.map("Treeview", background=[('selected', '#CCE4F7')], foreground=[('selected', '#000000')])
+        self.style.map("Treeview", background=[('selected', '#A9E9F5')], foreground=[('selected', '#071522')])
 
     def _build_ui(self):
         # 1. Header Bar
@@ -178,12 +180,12 @@ class OMRGradingApp(ctk.CTk):
 
         btn_sample_key = ctk.CTkButton(
             row_ctrl, 
-            text="Mẫu mặc định", 
-            width=100, 
+            text="Tải mẫu đáp án Excel", 
+            width=150, 
             height=32,
             fg_color="#4F79A2",
             hover_color="#3B5D7D",
-            command=self._set_sample_answer_key
+            command=self._download_sample_answer_key
         )
         btn_sample_key.pack(side="left", padx=3)
 
@@ -273,10 +275,15 @@ class OMRGradingApp(ctk.CTk):
         self.tree_images.heading("Size", text="Kích thước")
         self.tree_images.heading("Status", text="Kiểm tra")
 
-        self.tree_images.column("STT", width=40, anchor="center")
-        self.tree_images.column("FileName", width=180, anchor="w")
-        self.tree_images.column("Size", width=95, anchor="center")
-        self.tree_images.column("Status", width=95, anchor="center")
+        self.tree_images.column("STT", width=38, anchor="center")
+        self.tree_images.column("FileName", width=165, anchor="w")
+        self.tree_images.column("Size", width=88, anchor="center")
+        self.tree_images.column("Status", width=145, anchor="center")
+        self.tree_images.tag_configure("readable", foreground="#087443")
+        self.tree_images.tag_configure("waiting", foreground="#52606D")
+        self.tree_images.tag_configure("processing", foreground="#1677B8")
+        self.tree_images.tag_configure("success", foreground="#087443")
+        self.tree_images.tag_configure("error", foreground="#B42318")
 
         scroll_img_y = ttk.Scrollbar(tree_frame_left, orient="vertical", command=self.tree_images.yview)
         self.tree_images.configure(yscrollcommand=scroll_img_y.set)
@@ -304,9 +311,8 @@ class OMRGradingApp(ctk.CTk):
         stat_bar.pack(fill="x", padx=10, pady=(6, 6))
 
         self.card_total = self._create_stat_card(stat_bar, "Tổng số bài", "0", "#3B82F6")
-        self.card_success = self._create_stat_card(stat_bar, "Đọc thành công", "0", "#10B981")
-        self.card_warning = self._create_stat_card(stat_bar, "Cần kiểm tra", "0", "#F59E0B")
-        self.card_error = self._create_stat_card(stat_bar, "Bị lỗi", "0", "#EF4444")
+        self.card_success = self._create_stat_card(stat_bar, "Xong", "0", "#10B981")
+        self.card_error = self._create_stat_card(stat_bar, "Lỗi", "0", "#EF4444")
 
         ctl_bar = ctk.CTkFrame(right_box, fg_color="transparent")
         ctl_bar.pack(fill="x", padx=10, pady=4)
@@ -351,12 +357,13 @@ class OMRGradingApp(ctk.CTk):
 
         self.tree_results = ttk.Treeview(
             tree_frame_right, 
-            columns=("STT", "StudentID", "FileName", "Score", "Correct", "Wrong", "Blank", "Status"), 
+            columns=("STT", "SBD", "ExamCode", "FileName", "Score", "Correct", "Wrong", "Blank", "Status"), 
             show="headings", 
             selectmode="browse"
         )
         self.tree_results.heading("STT", text="STT")
-        self.tree_results.heading("StudentID", text="Mã học sinh")
+        self.tree_results.heading("SBD", text="Số báo danh")
+        self.tree_results.heading("ExamCode", text="Mã đề")
         self.tree_results.heading("FileName", text="Tên file ảnh")
         self.tree_results.heading("Score", text="Điểm /10")
         self.tree_results.heading("Correct", text=f"Đúng /{self.total_questions}")
@@ -365,13 +372,19 @@ class OMRGradingApp(ctk.CTk):
         self.tree_results.heading("Status", text="Trạng thái")
 
         self.tree_results.column("STT", width=40, anchor="center")
-        self.tree_results.column("StudentID", width=105, anchor="w")
-        self.tree_results.column("FileName", width=180, anchor="w")
-        self.tree_results.column("Score", width=80, anchor="center")
-        self.tree_results.column("Correct", width=85, anchor="center")
-        self.tree_results.column("Wrong", width=60, anchor="center")
-        self.tree_results.column("Blank", width=60, anchor="center")
-        self.tree_results.column("Status", width=100, anchor="center")
+        self.tree_results.column("SBD", width=95, anchor="center")
+        self.tree_results.column("ExamCode", width=75, anchor="center")
+        self.tree_results.column("FileName", width=155, anchor="w")
+        self.tree_results.column("Score", width=68, anchor="center")
+        self.tree_results.column("Correct", width=72, anchor="center")
+        self.tree_results.column("Wrong", width=52, anchor="center")
+        self.tree_results.column("Blank", width=58, anchor="center")
+        self.tree_results.column("Status", width=72, anchor="center")
+        self.tree_results.tag_configure("success", foreground="#087443")
+        self.tree_results.tag_configure("error", foreground="#B42318")
+        self.tree_results.tag_configure(
+            "current", background="#BFEFFC", foreground="#071522", font=("Segoe UI", 12, "bold")
+        )
 
         scroll_res_y = ttk.Scrollbar(tree_frame_right, orient="vertical", command=self.tree_results.yview)
         self.tree_results.configure(yscrollcommand=scroll_res_y.set)
@@ -407,9 +420,17 @@ class OMRGradingApp(ctk.CTk):
         top_bar = ctk.CTkFrame(self.tab_detail)
         top_bar.pack(fill="x", padx=10, pady=8)
 
-        ctk.CTkLabel(top_bar, text="Chọn bài học sinh:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=10)
+        ctk.CTkLabel(
+            top_bar, text="Bài đang xem:", font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold")
+        ).pack(side="left", padx=10)
         self.combo_students = ctk.CTkComboBox(
-            top_bar, values=["Chưa có kết quả nào"], width=260, command=self._on_combo_student_change
+            top_bar,
+            values=["Chưa có kết quả nào"],
+            width=320,
+            state="readonly",
+            border_width=2,
+            border_color="#00A6C7",
+            command=self._on_combo_student_change,
         )
         self.combo_students.pack(side="left", padx=5)
 
@@ -498,7 +519,7 @@ class OMRGradingApp(ctk.CTk):
         btn_frame.pack(anchor="w", padx=20, pady=15)
 
         ctk.CTkButton(
-            btn_frame, text="🖨️ Xuất mẫu phiếu trắng 50 câu (PNG)", height=36, command=self._export_blank_template
+            btn_frame, text="🖨️ Tải phiếu trắng PDF để in", height=42, command=self._export_blank_template
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkLabel(
@@ -533,6 +554,7 @@ class OMRGradingApp(ctk.CTk):
         for f in files:
             norm_path = os.path.abspath(f)
             self.image_validation_cache.pop(norm_path, None)
+            self.image_processing_status.pop(norm_path, None)
             if norm_path not in self.image_files:
                 self.image_files.append(norm_path)
                 new_count += 1
@@ -552,6 +574,7 @@ class OMRGradingApp(ctk.CTk):
         for f in sorted(found):
             norm_path = os.path.abspath(f)
             self.image_validation_cache.pop(norm_path, None)
+            self.image_processing_status.pop(norm_path, None)
             if norm_path not in self.image_files:
                 self.image_files.append(norm_path)
                 new_count += 1
@@ -675,6 +698,7 @@ class OMRGradingApp(ctk.CTk):
                     if os.path.basename(path) == fname:
                         self.image_files.remove(path)
                         self.image_validation_cache.pop(path, None)
+                        self.image_processing_status.pop(path, None)
                         removed += 1
                         break
         self._refresh_image_list()
@@ -686,6 +710,7 @@ class OMRGradingApp(ctk.CTk):
         if messagebox.askyesno("Xác nhận", "Bạn có chắc chắn muốn xóa toàn bộ ảnh khỏi danh sách?"):
             self.image_files.clear()
             self.image_validation_cache.clear()
+            self.image_processing_status.clear()
             self._refresh_image_list()
             self._update_progress_status("Đã làm trống danh sách ảnh.")
 
@@ -702,15 +727,26 @@ class OMRGradingApp(ctk.CTk):
             else:
                 is_valid, size_str, msg = self.image_validation_cache[img_path]
 
-            status_text = "Hợp lệ" if is_valid else f"Lỗi ({msg})"
+            if not is_valid:
+                status_text, tag = f"Lỗi: {msg}", "error"
+            else:
+                status_text = self.image_processing_status.get(img_path, "Chờ đọc")
+                tag = {"Chờ đọc": "waiting", "Đang đọc": "processing", "Xong": "success", "Lỗi": "error"}.get(status_text, "waiting")
             if is_valid:
                 valid_count += 1
-            self.tree_images.insert("", "end", values=(idx, fname, size_str, status_text))
+            self.tree_images.insert(
+                "", "end", values=(idx, fname, size_str, status_text),
+                tags=(tag,),
+            )
 
         self.lbl_img_status.configure(
-            text=f"Tổng số: {len(self.image_files)} ảnh ({valid_count} hợp lệ, {len(self.image_files) - valid_count} lỗi)"
+            text=f"Tổng số: {len(self.image_files)} ảnh ({valid_count} sẵn sàng, {len(self.image_files) - valid_count} lỗi)"
         )
         self.card_total.configure(text=str(len(self.image_files)))
+
+    def _update_image_processing_status(self, path: str, status: str):
+        self.image_processing_status[path] = status
+        self._refresh_image_list()
 
     def _validate_image_file(self, path: str):
         if not os.path.exists(path):
@@ -755,6 +791,8 @@ class OMRGradingApp(ctk.CTk):
         self.entry_question_count.insert(0, str(question_count))
         self.answer_key = {}
         self.entry_key.delete(0, "end")
+        self.image_processing_status = {path: "Chờ đọc" for path in self.image_files}
+        self._refresh_image_list()
         self._refresh_answer_key_display()
         self.btn_start_grading.configure(text=f"▶ BẮT ĐẦU CHẤM BÀI ({question_count} CÂU)")
         self.tree_results.delete(*self.tree_results.get_children())
@@ -763,7 +801,6 @@ class OMRGradingApp(ctk.CTk):
         self.selected_sub = None
         self.card_total.configure(text="0")
         self.card_success.configure(text="0")
-        self.card_warning.configure(text="0")
         self.card_error.configure(text="0")
         self.progress_bar.set(0.0)
         self.tree_results.heading("Correct", text=f"Đúng /{question_count}")
@@ -805,12 +842,37 @@ class OMRGradingApp(ctk.CTk):
             f"Đã lưu thành công đáp án chuẩn cho {len(parsed)}/{self.total_questions} câu hỏi!"
         )
 
-    def _set_sample_answer_key(self):
-        self.answer_key = generate_sample_answer_key(self.total_questions)
-        sample_str = " ".join([self.answer_key[i] for i in range(1, self.total_questions + 1)])
-        self.entry_key.delete(0, "end")
-        self.entry_key.insert(0, sample_str)
-        self._refresh_answer_key_display()
+    def _download_sample_answer_key(self):
+        filepath = filedialog.asksaveasfilename(
+            title="Tải mẫu đáp án Excel",
+            initialfile=f"mau_dap_an_{self.total_questions}_cau.xlsx",
+            defaultextension=".xlsx",
+            filetypes=[("Excel Workbook", "*.xlsx")],
+        )
+        if not filepath:
+            return
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Font, PatternFill, Alignment
+
+            workbook = Workbook()
+            sheet = workbook.active
+            sheet.title = "Dap_An"
+            sheet.append(["Câu hỏi", "Đáp án"])
+            for question, answer in generate_sample_answer_key(self.total_questions).items():
+                sheet.append([question, answer])
+            for cell in sheet[1]:
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill("solid", fgColor="0B3558")
+                cell.alignment = Alignment(horizontal="center")
+            sheet.column_dimensions["A"].width = 18
+            sheet.column_dimensions["B"].width = 16
+            sheet.freeze_panes = "A2"
+            sheet.auto_filter.ref = sheet.dimensions
+            workbook.save(filepath)
+            messagebox.showinfo("Tải mẫu đáp án", f"Đã lưu file mẫu đáp án Excel:\n{filepath}")
+        except Exception as exc:
+            messagebox.showerror("Lỗi", f"Không thể tạo file mẫu đáp án: {exc}")
 
     def _import_key_from_file(self):
         filepath = filedialog.askopenfilename(
@@ -888,6 +950,9 @@ class OMRGradingApp(ctk.CTk):
             return
 
         self.is_processing = True
+        for path in self.image_files:
+            self.image_processing_status[path] = "Đang đọc"
+        self._refresh_image_list()
         self.entry_question_count.configure(state="disabled")
         self.btn_apply_question_count.configure(state="disabled")
         self.btn_start_grading.configure(state="disabled", text="⏳ ĐANG XỬ LÝ HÀNG LOẠT...")
@@ -901,8 +966,7 @@ class OMRGradingApp(ctk.CTk):
 
     def _run_batch_worker(self):
         total = len(self.image_files)
-        success_count = 0
-        warning_count = 0
+        done_count = 0
         error_count = 0
 
         for idx, img_path in enumerate(self.image_files, start=1):
@@ -928,16 +992,15 @@ class OMRGradingApp(ctk.CTk):
 
             self.submissions.append(sub)
 
-            if sub.status == "Thành công":
-                success_count += 1
-            elif sub.status == "Cảnh báo":
-                warning_count += 1
-            else:
+            if sub.status == "Lỗi":
                 error_count += 1
+            else:
+                done_count += 1
 
             self.after(0, self._add_result_row_to_table, idx, sub)
+            self.after(0, self._update_image_processing_status, img_path, "Lỗi" if sub.status == "Lỗi" else "Xong")
 
-        self.after(0, self._finish_batch_grading, total, success_count, warning_count, error_count)
+        self.after(0, self._finish_batch_grading, total, done_count, error_count)
 
     def _update_batch_progress(self, progress_float: float, text: str):
         self.progress_bar.set(progress_float)
@@ -947,14 +1010,18 @@ class OMRGradingApp(ctk.CTk):
         st_id = sub.student_id or sub.submission_id
         fname = os.path.basename(sub.image_path)
         score_str = f"{sub.score:.2f}" if sub.status != "Lỗi" else "0.00"
+        status_tag = "error" if sub.status == "Lỗi" else "success"
+        status_text = "Lỗi" if sub.status == "Lỗi" else "Xong"
+        sbd = self._format_detected_digits(sub.sbd)
+        exam_code = self._format_detected_digits(sub.exam_code)
         
         self.tree_results.insert("", "end", values=(
-            stt, st_id, fname, score_str,
+            stt, sbd, exam_code, fname, score_str,
             f"{sub.correct_count}/{self.total_questions}", sub.wrong_count, sub.blank_count,
-            sub.status
-        ))
+            status_text
+        ), tags=(status_tag,))
 
-    def _finish_batch_grading(self, total: int, success: int, warning: int, error: int):
+    def _finish_batch_grading(self, total: int, done: int, error: int):
         self.is_processing = False
         self.entry_question_count.configure(state="normal")
         self.btn_apply_question_count.configure(state="normal")
@@ -966,22 +1033,20 @@ class OMRGradingApp(ctk.CTk):
         self.lbl_progress.configure(text=f"Đã hoàn thành {total} bài!")
 
         self.card_total.configure(text=str(total))
-        self.card_success.configure(text=str(success))
-        self.card_warning.configure(text=str(warning))
+        self.card_success.configure(text=str(done))
         self.card_error.configure(text=str(error))
 
-        combo_values = [f"{s.student_id or s.submission_id} - {os.path.basename(s.image_path)}" for s in self.submissions]
-        if combo_values:
-            self.combo_students.configure(values=combo_values)
-            self.combo_students.set(combo_values[0])
+        if self.submissions:
+            self.selected_sub = self.submissions[0]
+            self._refresh_submission_choices()
+            self._select_result_row_for_submission(self.submissions[0])
             self._display_submission_detail(self.submissions[0])
 
         messagebox.showinfo(
             "Hoàn thành chấm bài",
             f"Đã hoàn tất chấm hàng loạt {total} bài thi {self.total_questions} câu:\n"
-            f"  • Thành công: {success} bài\n"
-            f"  • Cần kiểm tra: {warning} bài\n"
-            f"  • Bị lỗi: {error} bài"
+            f"  • Xong: {done} bài\n"
+            f"  • Lỗi: {error} bài"
         )
 
     def _action_export_excel(self):
@@ -1024,34 +1089,79 @@ class OMRGradingApp(ctk.CTk):
         stt = int(item["values"][0])
         sub = self.submissions[stt - 1]
         self.selected_sub = sub
+        self._select_result_row_for_submission(sub)
 
-        val_str = f"{sub.student_id or sub.submission_id} - {os.path.basename(sub.image_path)}"
-        self.combo_students.set(val_str)
+        self._refresh_submission_choices()
         self._display_submission_detail(sub)
         self.tabview.set("  🔍 Xem chi tiết bài làm & Ảnh kết quả  ")
 
     def _on_combo_student_change(self, choice: str):
-        for sub in self.submissions:
-            val_str = f"{sub.student_id or sub.submission_id} - {os.path.basename(sub.image_path)}"
-            if val_str == choice:
+        selected_label = choice.removeprefix("▶ ĐANG XEM · ")
+        for index, sub in enumerate(self.submissions, start=1):
+            if self._submission_choice(sub, index) == selected_label:
                 self.selected_sub = sub
+                self._refresh_submission_choices()
+                self._select_result_row_for_submission(sub)
                 self._display_submission_detail(sub)
-                break
+                return
+
+    def _submission_choice(self, sub: Submission, index: int) -> str:
+        sbd = self._format_detected_digits(sub.sbd)
+        exam_code = self._format_detected_digits(sub.exam_code)
+        return f"{index:02d} · {sbd} | {exam_code} - {os.path.basename(sub.image_path)}"
+
+    @staticmethod
+    def _format_detected_digits(value: str) -> str:
+        if not value or not value.strip("?"):
+            return "Chưa đọc"
+        return value
+
+    def _refresh_submission_choices(self):
+        choices = []
+        selected_choice = ""
+        for index, sub in enumerate(self.submissions, start=1):
+            choice = self._submission_choice(sub, index)
+            if sub is self.selected_sub:
+                selected_choice = choice
+                choice = f"▶ ĐANG XEM · {choice}"
+            choices.append(choice)
+        self.combo_students.configure(values=choices)
+        if selected_choice:
+            self.combo_students.set(f"▶ ĐANG XEM · {selected_choice}")
+
+    def _select_result_row_for_submission(self, sub: Submission):
+        """Keep the result row for the currently reviewed student visibly selected."""
+        if not hasattr(self, "tree_results"):
+            return
+        index = next((i for i, item in enumerate(self.submissions) if item is sub), None)
+        rows = self.tree_results.get_children()
+        if index is None or index >= len(rows):
+            return
+        row_id = rows[index]
+        for item in rows:
+            tags = tuple(tag for tag in self.tree_results.item(item, "tags") if tag != "current")
+            self.tree_results.item(item, tags=tags)
+        tags = tuple(tag for tag in self.tree_results.item(row_id, "tags") if tag != "current") + ("current",)
+        self.tree_results.item(row_id, tags=tags)
+        self.tree_results.selection_set(row_id)
+        self.tree_results.focus(row_id)
+        self.tree_results.see(row_id)
 
     def _display_submission_detail(self, sub: Submission):
         question_count = len(sub.details)
+        sbd = self._format_detected_digits(sub.sbd)
+        exam_code = self._format_detected_digits(sub.exam_code)
         if sub.status == "Lỗi":
             self.lbl_detail_score.configure(
-                text=f"[{sub.student_id}]  TRẠNG THÁI: LỖI  |  {sub.error_message}", text_color="#DC2626"
+                text=f"SBD: {sbd}  |  Mã đề: {exam_code}  |  Lỗi: {sub.error_message}", text_color="#DC2626"
             )
         else:
             rank = "Giỏi" if sub.score >= 8.0 else ("Khá" if sub.score >= 6.5 else ("Trung bình" if sub.score >= 5.0 else "Yếu"))
             text_stat = (
-                f"[{sub.student_id}]  ĐIỂM: {sub.score:.2f} / 10.0  |  "
+                f"SBD: {sbd}  |  Mã đề: {exam_code}  |  Xong  |  ĐIỂM: {sub.score:.2f} / 10.0  |  "
                 f"Đúng: {sub.correct_count}/{question_count}  |  Sai: {sub.wrong_count}  |  Trống: {sub.blank_count}  |  Loại: {rank}"
             )
-            color = "#1E824C" if sub.status == "Thành công" else "#D97724"
-            self.lbl_detail_score.configure(text=text_stat, text_color=color)
+            self.lbl_detail_score.configure(text=text_stat, text_color="#1E824C")
 
         for item in self.tree_details.get_children():
             self.tree_details.delete(item)
@@ -1137,19 +1247,37 @@ class OMRGradingApp(ctk.CTk):
     # =========================================================================
     def _export_blank_template(self):
         save_path = filedialog.asksaveasfilename(
-            title="Lưu mẫu phiếu trắng 50 câu",
-            defaultextension=".png",
-            filetypes=[("Ảnh PNG", "*.png")]
+            title="Lưu phiếu trắng FormTHPT50 để in",
+            defaultextension=".pdf",
+            filetypes=[("Tài liệu PDF", "*.pdf")]
         )
         if not save_path:
             return
 
-        blank = generate_50_mcq_template()
-        ok = imwrite_utf8(save_path, blank)
-        if ok:
-            messagebox.showinfo("Thành công", f"Đã xuất mẫu phiếu trắng 50 câu ra:\n{save_path}")
-        else:
-            messagebox.showerror("Lỗi", "Không thể ghi file ảnh.")
+        if not save_path.lower().endswith(".pdf"):
+            save_path += ".pdf"
+        try:
+            blank = generate_50_mcq_template()
+            encoded_ok, encoded_image = cv2.imencode(".png", blank)
+            if not encoded_ok:
+                raise ValueError("Không thể mã hóa ảnh phiếu trắng.")
+
+            pdf = pymupdf.open()
+            try:
+                # FormTHPT50 is rendered at 200 DPI; map it onto an exact A4 page.
+                page = pdf.new_page(width=595.276, height=841.89)
+                page.insert_image(page.rect, stream=encoded_image.tobytes(), keep_proportion=False)
+                pdf.save(save_path)
+            finally:
+                pdf.close()
+
+            messagebox.showinfo(
+                "Xuất phiếu thành công",
+                f"Đã tạo phiếu trắng PDF khổ A4, sẵn sàng in:\n{save_path}\n\n"
+                "Khi in, chọn 'Kích thước thực tế' hoặc tỷ lệ 100%.",
+            )
+        except Exception as error:
+            messagebox.showerror("Không thể xuất PDF", f"Đã xảy ra lỗi khi tạo phiếu PDF:\n{error}")
 
     def _toggle_theme(self):
         current = ctk.get_appearance_mode()

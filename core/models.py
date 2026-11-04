@@ -4,40 +4,8 @@ Module: models.py
 Tinh giản, gọn gàng, tập trung đúng vào yêu cầu bài toán Thị giác máy tính.
 """
 
-from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Optional, Any
-import time
-
-
-@dataclass
-class Exam:
-    """Thông tin đề thi và đáp án chuẩn 50 câu"""
-    exam_id: str = "exam_50_cau"
-    title: str = "Bài thi trắc nghiệm THPT - 50 câu"
-    subject: str = "Toán / Khoa học"
-    num_questions: int = 50
-    max_score: float = 10.0
-    created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
-    # answer_key: {1: 'A', 2: 'B', ..., 50: 'D'}
-    answer_key: Dict[int, str] = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> 'Exam':
-        # Chuyển đổi key của answer_key sang int
-        key_data = data.get("answer_key", {})
-        int_key = {int(k): str(v).upper() for k, v in key_data.items() if str(k).isdigit()}
-        return cls(
-            exam_id=data.get("exam_id", "exam_50_cau"),
-            title=data.get("title", "Bài thi trắc nghiệm THPT - 50 câu"),
-            subject=data.get("subject", "Toán / Khoa học"),
-            num_questions=data.get("num_questions", 50),
-            max_score=data.get("max_score", 10.0),
-            created_at=data.get("created_at", ""),
-            answer_key=int_key
-        )
+from dataclasses import dataclass, field
+from typing import Any, Dict
 
 
 @dataclass
@@ -46,7 +14,7 @@ class Submission:
     submission_id: str
     student_id: str = ""                # Mã học sinh (lấy từ tên file hoặc SBD)
     student_name: str = ""
-    exam_code: str = "101"              # Mã đề thi (nếu có trên phiếu)
+    exam_code: str = ""                 # Mã đề thi đọc từ phiếu
     image_path: str = ""                # Đường dẫn file ảnh gốc
     processed_image_path: str = ""      # Đường dẫn phiếu đã cắt và căn phẳng
     annotated_image_path: str = ""      # Đường dẫn ảnh đã vẽ overlay kết quả
@@ -69,12 +37,5 @@ class Submission:
     needs_review: bool = False
     warning_message: str = ""
     error_message: str = ""
+    sbd: str = ""                       # Số báo danh đọc từ phiếu
 
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> 'Submission':
-        valid_keys = cls.__dataclass_fields__.keys()
-        filtered = {k: v for k, v in data.items() if k in valid_keys}
-        return cls(**filtered)

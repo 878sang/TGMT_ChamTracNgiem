@@ -100,32 +100,8 @@ def generate_sample_submission_50_mcq(
     return img
 
 
-def add_perspective_and_noise(img: np.ndarray, angle_deg: float = 8.0) -> np.ndarray:
-    """Tạo hiệu ứng ảnh chụp từ camera điện thoại bị lệch góc"""
-    h, w = img.shape[:2]
-    bg_h, bg_w = int(h * 1.25), int(w * 1.25)
-    bg = np.ones((bg_h, bg_w, 3), dtype=np.uint8) * 190
-
-    src_pts = np.float32([[0, 0], [w, 0], [w, h], [0, h]])
-    pad_x = 120
-    pad_y = 120
-    dst_pts = np.float32([
-        [pad_x + 40, pad_y + 30],
-        [pad_x + w - 30, pad_y + 10],
-        [pad_x + w + 20, pad_y + h - 20],
-        [pad_x - 20, pad_y + h + 15]
-    ])
-
-    matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
-    warped = cv2.warpPerspective(img, matrix, (bg_w, bg_h), borderValue=(190, 190, 190))
-    gradient = np.linspace(0.85, 1.05, bg_w)
-    gradient = np.tile(gradient, (bg_h, 1))
-    warped_float = warped.astype(np.float32) * gradient[:, :, np.newaxis]
-    return np.clip(warped_float, 0, 255).astype(np.uint8)
-
-
 def generate_templates():
-    """Generate the active THPT50 blank sheet and teacher answer-key sheet."""
+    """Generate the blank sheet from the active FormTHPT50 layout."""
     template_dir = os.path.join(PROJECT_ROOT, "templates")
     os.makedirs(template_dir, exist_ok=True)
 
@@ -133,14 +109,7 @@ def generate_templates():
     blank_template = generate_50_mcq_template()
     imwrite_utf8(os.path.join(template_dir, "phieu_50_cau_chuan.png"), blank_template)
 
-    # Đáp án chuẩn đề demo (50 câu)
-    standard_key = {i: ['A', 'B', 'C', 'D'][(i * 3 + 1) % 4] for i in range(1, 51)}
-
-    # 2. Phiếu đáp án mẫu của giáo viên (tô sẵn 50 câu để test tính năng tự dò đáp án từ ảnh)
-    img_teacher_key = generate_sample_submission_50_mcq("GV01", "GIAO VIEN (DAP AN CHUAN)", "101", standard_key, "999999")
-    imwrite_utf8(os.path.join(template_dir, "phieu_dap_an_mau_giao_vien.png"), img_teacher_key)
-
-    print("Đã tạo mẫu phiếu trắng và phiếu đáp án giáo viên thành công!")
+    print("Đã tạo mẫu phiếu trắng FormTHPT50 thành công!")
 
 
 if __name__ == "__main__":

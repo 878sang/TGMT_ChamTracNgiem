@@ -73,15 +73,15 @@ Do An/
 │
 ├── core/                              # Các thuật toán xử lý cốt lõi (OpenCV & Backend)
 │   ├── cv_utils.py                    # Đọc/ghi ảnh UTF-8 an toàn trên Windows
-│   ├── models.py                      # Data models (Submission, Exam)
+│   ├── models.py                      # Data model Submission
 │   ├── image_alignment.py             # Tiền xử lý, phát hiện marker & nắn phẳng phối cảnh
 │   ├── layouts.py                     # Nạp layout OMR FormTHPT50
 │   ├── omr_extractor.py               # Bóc tách OMR theo layout FormTHPT50
 │   ├── visualizer.py                  # Vẽ overlay kết quả chấm trực quan lên ảnh bài làm
 │   ├── grading_engine.py              # Logic chấm điểm thang 10.0 (0.2đ/câu) & xếp loại
 │   ├── excel_exporter.py              # Xuất báo cáo kết quả thi ra Excel gồm 3 Sheet
-│   ├── sheet_generator.py             # Sinh phiếu trắng, phiếu đáp án mẫu GV & tập ảnh mẫu
-│   └── exam_processor.py              # Pipeline xử lý trọn gói & tự dò đáp án từ ảnh GV
+│   ├── sheet_generator.py             # Tạo và sinh phiếu FormTHPT50
+│   └── exam_processor.py              # Căn chỉnh, nhận diện, chấm và vẽ kết quả
 │
 ├── gui/                               # Giao diện người dùng
 │   └── app.py                         # Ứng dụng Desktop chấm phiếu FormTHPT50
@@ -89,14 +89,16 @@ Do An/
 ├── templates/
 │   ├── phieu_50_cau_chuan.png         # Mẫu phiếu thi trắng 50 câu chuẩn
 │   ├── layouts/thpt50.json            # Layout pixel lấy từ PDF FormTHPT50
-│   ├── layouts/thpt50_base.png        # Bản PDF render sạch dùng cho ảnh mẫu
-│   ├── layouts/thpt50_debug.png       # Ảnh kiểm tra overlay tọa độ layout
-│   └── phieu_dap_an_mau_giao_vien.png # Phiếu đáp án chuẩn của giáo viên
+│   └── layouts/thpt50_base.png        # Nền phiếu chuẩn dùng để tạo phiếu trắng
 │
 ├── tests/
 │   └── test_omr_50_cau.py             # Unit test cho FormTHPT50
 ├── tools/
-│   └── build_layout_from_pdf.py       # Trích layout, render nền và ảnh debug từ PDF
+│   ├── build_layout_from_pdf.py       # Trích xuất layout từ PDF nguồn
+│   ├── build_concise_report.py        # Tạo báo cáo phiên bản ngắn
+│   ├── build_complete_report.py      # Tạo báo cáo đầy đủ, dùng tiện ích từ bản ngắn
+│   ├── build_presentation.py          # Tạo bộ slide cơ sở
+│   └── redesign_presentation.py       # Sắp lại slide cơ sở thành bản 17 slide
 │
 ├── main.py                            # Điểm khởi chạy chương trình
 └── requirements.txt                   # Thư viện yêu cầu
