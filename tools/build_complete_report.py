@@ -17,7 +17,7 @@ from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import nsdecls, qn
 
 from build_concise_report import (
-    create_document, add_p, add_bullet, add_h1, add_h2, add_h3,
+    create_document, add_p, add_bullet, add_h1, add_h2, add_h3, normalize_academic_body,
     add_code_block, add_image_figure, add_table_data
 )
 
@@ -43,12 +43,12 @@ def add_callout(doc, title, text, box_type="NOTE"):
     paragraph.paragraph_format.right_indent = Inches(0.12)
     label = paragraph.add_run(f"{title}\n")
     label.font.name = "Times New Roman"
-    label.font.size = Pt(11)
+    label.font.size = Pt(13)
     label.font.bold = True
     label.font.color.rgb = RGBColor(31, 78, 121)
     body = paragraph.add_run(text)
     body.font.name = "Times New Roman"
-    body.font.size = Pt(10.5)
+    body.font.size = Pt(13)
     body.font.color.rgb = RGBColor(30, 41, 59)
 
 def build_report():
@@ -287,9 +287,7 @@ def build_report():
         ("        3.2.2. Quy trình thao tác 3 bước chuẩn của người dùng", "40"),
         ("    3.3. Thực nghiệm và đánh giá kết quả", "42"),
         ("        3.3.1. Các kịch bản thử nghiệm trên tập dữ liệu thử thách", "42"),
-        ("        3.3.2. Kết quả kiểm thử tự động Unit Tests (27/27 test cases)", "45"),
-        ("        3.3.3. Đánh giá hiệu năng thời gian và độ chính xác nhận diện", "46"),
-        ("        3.3.4. Kết quả trực quan hóa overlay và xuất báo cáo Excel 3 Sheet", "48"),
+        ("        3.3.2. Kết quả trực quan hóa overlay và xuất báo cáo Excel 3 Sheet", "48"),
         ("KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN", "51"),
         ("    1. Kết quả đạt được", "51"),
         ("    2. Những tồn tại và hạn chế", "52"),
@@ -300,9 +298,9 @@ def build_report():
     
     for item, page_str in toc_items:
         p_t = doc.add_paragraph()
-        p_t.paragraph_format.space_before = Pt(1)
-        p_t.paragraph_format.space_after = Pt(1)
-        p_t.paragraph_format.line_spacing = 1.15
+        p_t.paragraph_format.space_before = Pt(3)
+        p_t.paragraph_format.space_after = Pt(3)
+        p_t.paragraph_format.line_spacing = 1.3
         p_t.paragraph_format.first_line_indent = Inches(0)
         
         is_main = item.startswith("CHƯƠNG") or item in ["LỜI CẢM ƠN", "MỤC LỤC", "MỞ ĐẦU", "KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN", "TÀI LIỆU THAM KHẢO", "PHỤ LỤC 01: BẢNG ĐÁNH GIÁ THÀNH VIÊN VÀ PHÂN CÔNG NHIỆM VỤ"]
@@ -376,9 +374,6 @@ def build_report():
         ("Bảng 2.1", "Bảng đặc tả các trường dữ liệu đầu vào và đầu ra của hệ thống", "14"),
         ("Bảng 3.1", "Danh mục và chức năng các module trong kiến trúc mã nguồn", "30"),
         ("Bảng 3.2", "Đặc tả thông số hình học của mẫu phiếu FormTHPT50 trên canvas chuẩn", "32"),
-        ("Bảng 3.3", "Bảng tổng hợp kết quả 27 ca kiểm thử tự động (Unit Tests)", "45"),
-        ("Bảng 3.4", "Bảng đo thời gian thực thi (latency) chi tiết từng công đoạn trong pipeline", "47"),
-        ("Bảng 3.5", "Bảng đánh giá độ chính xác nhận diện OMR trên các điều kiện thực nghiệm", "47"),
         ("Bảng 4.1", "Bảng phân công nhiệm vụ và tự đánh giá đóng góp của 4 thành viên", "55"),
     ]
     for tid, ttitle, tpage in tbl_items:
@@ -403,7 +398,7 @@ def build_report():
     add_p(doc, "Trong kỷ nguyên số hóa giáo dục hiện đại, các kỳ thi trắc nghiệm khách quan ngày càng khẳng định vị trí then chốt tại các cấp học và bậc học trên toàn quốc. Đặc biệt, kể từ khi Bộ Giáo dục và Đào tạo áp dụng hình thức thi trắc nghiệm cho hầu hết các môn thi trong Kỳ thi Tốt nghiệp THPT và các đợt thi Đánh giá năng lực của các trường đại học lớn, số lượng phiếu trả lời trắc nghiệm cần xử lý mỗi kỳ thi lên tới hàng triệu bài.")
     add_p(doc, "Tại các trường THPT, trung tâm khảo thí và các lớp luyện thi, giáo viên thường xuyên phải tổ chức các kỳ kiểm tra định kỳ (15 phút, 1 tiết, kiểm tra giữa kỳ, thi học kỳ và các đợt thi thử tốt nghiệp). Khối lượng bài thi cần chấm sau mỗi đợt có thể từ vài trăm đến hàng ngàn bài. Nếu thực hiện chấm thi thủ công bằng cách sử dụng phiếu đục lỗ truyền thống hoặc đối chiếu từng câu bằng mắt, giáo viên sẽ phải đối mặt với vô vàn áp lực: mất rất nhiều thời gian (trung bình 1 - 2 phút cho mỗi bài), dễ xảy ra sai sót do mỏi mắt nhầm lẫn giữa các mã đề, và thiếu tính minh bạch khách quan.")
     add_p(doc, "Các giải pháp phần cứng chấm thi OMR chuyên dụng hiện có trên thị trường tuy đạt độ ổn định cao nhưng giá thành cực kỳ đắt đỏ (từ hàng chục đến hàng trăm triệu đồng cho một máy quét chuyên dụng), đòi hỏi mẫu giấy in dập lỗ riêng biệt có định lượng cao và chi phí bảo trì tốn kém, hoàn toàn không khả thi để trang bị đại trà cho từng giáo viên bộ môn hay các trường học vùng khó khăn.")
-    add_p(doc, "Xuất phát từ thực tiễn cấp bách đó, việc nghiên cứu và xây dựng một giải pháp phần mềm nhận diện và chấm bài thi trắc nghiệm tự động dựa trên công nghệ Thị giác máy tính (Computer Vision) kết hợp xử lý ảnh số bằng ngôn ngữ Python và thư viện OpenCV là một hướng đi đột phá, mang ý nghĩa khoa học và thực tiễn sâu sắc. Giải pháp này cho phép tận dụng trực tiếp các thiết bị sẵn có như camera điện thoại thông minh, máy quét văn phòng thông thường hay ảnh chụp màn hình để chấm bài tức thì, với chi phí đầu tư bằng 0 đồng và độ chính xác tiệm cận tuyệt đối.")
+    add_p(doc, "Xuất phát từ thực tiễn cấp bách đó, việc nghiên cứu và xây dựng một giải pháp phần mềm nhận diện và chấm bài thi trắc nghiệm tự động dựa trên công nghệ Thị giác máy tính (Computer Vision) kết hợp xử lý ảnh số bằng ngôn ngữ Python và thư viện OpenCV là một hướng đi đột phá, mang ý nghĩa khoa học và thực tiễn sâu sắc. Giải pháp này cho phép tận dụng trực tiếp các thiết bị sẵn có như camera điện thoại thông minh, máy quét văn phòng thông thường hay ảnh chụp màn hình để chấm bài tức thì, với chi phí đầu tư thiết bị thấp hơn giải pháp phần cứng chuyên dụng. Độ chính xác cần được đo trên tập ảnh phù hợp với điều kiện sử dụng.")
     
     add_h2(doc, "2. Mục đích nghiên cứu")
     add_p(doc, "Mục đích nghiên cứu chính của đề tài là xây dựng hoàn chỉnh một hệ thống ứng dụng Desktop tự động hóa toàn diện quy trình quét và chấm phiếu thi trắc nghiệm 50 câu (mẫu FormTHPT50), đáp ứng các yêu cầu kỹ thuật khắt khe:")
@@ -418,13 +413,11 @@ def build_report():
 
     add_h2(doc, "4. Phương pháp nghiên cứu")
     add_bullet(doc, "Thu thập và phân tích các tài liệu học thuật về xử lý ảnh số, lý thuyết không gian hình học, ma trận biến đổi phối cảnh 2D, các giải thuật phân ngưỡng nhị phân (Otsu, Adaptive Gaussian) và mô hình nhận diện quang học OMR.", bold_prefix="Phương pháp lý thuyết:")
-    add_bullet(doc, "Xây dựng bộ dữ liệu ảnh bài thi đa dạng (ảnh phẳng scan, ảnh chụp góc nghiêng 15-30 độ, ảnh xoay các hướng, ảnh bóng đổ, ảnh thiếu sáng, ảnh có lỗi tô chì); tiến hành kiểm thử tự động với Pytest và đo đạc định lượng thời gian xử lý cũng như độ chính xác nhận diện.", bold_prefix="Phương pháp thực nghiệm:")
 
     add_h2(doc, "5. Bố cục của báo cáo đồ án")
     add_p(doc, "Báo cáo đồ án được cấu trúc thành 3 Chương nội dung chính cùng phần Mở đầu, Kết luận, Phụ lục và Tài liệu tham khảo:")
     add_bullet(doc, "Trình bày bối cảnh thực tiễn, tổng quan về công nghệ OMR, so sánh các giải pháp hiện nay và xác định mục tiêu, phạm vi nghiên cứu của đề tài.", bold_prefix="Chương 1: Tổng quan và mô tả bài toán -")
     add_bullet(doc, "Phân tích chi tiết các yêu cầu hệ thống (5 chức năng cốt lõi), thiết kế kiến trúc tổng thể 4 tầng, trình bày chi tiết pipeline xử lý Thị giác máy tính (nắn phối cảnh, OMR Ink Contrast, bóc tách SBD/Mã đề) và giới thiệu các công nghệ công cụ phát triển.", bold_prefix="Chương 2: Phân tích và thiết kế thuật toán -")
-    add_bullet(doc, "Trình bày chi tiết cấu trúc mã nguồn dự án, đặc tả hình học phiếu FormTHPT50, hiện thực hóa các hàm thuật toán trong Core, thiết kế giao diện Desktop CustomTkinter theo quy trình 3 bước, báo cáo kết quả kiểm thử tự động 27 unit tests và đánh giá thực nghiệm định lượng về hiệu năng, độ chính xác cũng như trích xuất báo cáo Excel.", bold_prefix="Chương 3: Cài đặt và thực nghiệm đánh giá -")
     add_bullet(doc, "Tổng kết các kết quả nổi bật đã đạt được, chỉ ra những hạn chế còn tồn tại và vạch ra các định hướng nâng cấp, mở rộng hệ thống trong tương lai.", bold_prefix="Kết luận và hướng phát triển -")
     add_bullet(doc, "Bảng tổng hợp phân công nhiệm vụ và tự đánh giá đóng góp của 4 thành viên.", bold_prefix="Phụ lục 01: Bảng đánh giá thành viên -")
     
@@ -443,8 +436,8 @@ def build_report():
     add_bullet(doc, "Sau khi chấm xong, giáo viên phải nhập tay từng con điểm vào phần mềm quản lý điểm hoặc bảng tính Excel, mất thêm rất nhiều công đoạn trung gian và dễ gây sai lệch số liệu.", bold_prefix="Chậm trễ trong khâu thống kê:")
     
     add_p(doc, "Việc áp dụng công nghệ Thị giác máy tính (Computer Vision) để tự động hóa hoàn toàn quy trình này đem lại nhiều lợi ích thiết thực và đột phá:")
-    add_bullet(doc, "Một bài thi 50 câu được nắn phẳng, nhận diện và chấm điểm trọn gói chỉ trong 0.15 - 0.35 giây, nhanh gấp hàng trăm lần so với chấm thủ công, giúp hoàn thành việc chấm hàng trăm bài thi chỉ trong vài phút.", bold_prefix="Tiết kiệm tối đa thời gian:")
-    add_bullet(doc, "Thuật toán xử lý ma trận điểm ảnh tuyệt đối công bằng, loại bỏ hoàn toàn các sai sót chủ quan và cảm tính của con người trong quá trình đối chiếu đáp án.", bold_prefix="Độ chính xác và khách quan tuyệt đối:")
+    add_bullet(doc, "H\u1ec7 th\u1ed1ng h\u1ed7 tr\u1ee3 x\u1eed l\u00fd nhi\u1ec1u phi\u1ebfu theo l\u00f4; th\u1eddi gian th\u1ef1c t\u1ebf ph\u1ee5 thu\u1ed9c c\u1ea5u h\u00ecnh m\u00e1y v\u00e0 ch\u1ea5t l\u01b0\u1ee3ng \u1ea3nh.", bold_prefix="Ti\u1ebft ki\u1ec7m th\u1eddi gian:")
+    add_bullet(doc, "K\u1ebft qu\u1ea3 nh\u1ea5t qu\u00e1n; c\u00e1c tr\u01b0\u1eddng h\u1ee3p kh\u00f4ng r\u00f5 chuy\u1ec3n ra ki\u1ec3m tra l\u1ea1i.", bold_prefix="Ch\u1ea5m nh\u1ea5t qu\u00e1n:")
     add_bullet(doc, "Không yêu cầu phần cứng quét chuyên dụng đắt tiền (vốn có giá từ 30 đến trên 100 triệu đồng); hệ thống hoạt động hoàn hảo với ảnh chụp từ camera điện thoại thông minh giá rẻ hoặc máy quét văn phòng thông thường.", bold_prefix="Tối ưu chi phí đầu tư:")
     add_bullet(doc, "Tự động phân tích phổ điểm, tính điểm trung bình, xếp loại học lực và xuất file Excel 3 Sheet chuyên nghiệp phục vụ đánh giá chất lượng dạy và học theo đúng chuẩn sư phạm hiện đại.", bold_prefix="Tự động hóa thống kê toàn diện:")
 
@@ -503,14 +496,14 @@ def build_report():
     add_bullet(doc, "Đọc ảnh an toàn với đường dẫn tiếng Việt có dấu qua hàm imread_utf8; chuyển đổi ảnh xám, khử nhiễu hạt bằng Gaussian Blur; nhị phân hóa thích nghi Otsu/Adaptive Thresholding; tự động phát hiện 4 marker vuông góc của FormTHPT50; nắn phẳng phối cảnh (Perspective Transform) về canvas chuẩn 1653 x 2337 pixel; tự động phát hiện và xoay đúng chiều nếu ảnh bị chụp xoay ngang hoặc ngược.", bold_prefix="Chức năng 2 - Tiền xử lý ảnh và căn chỉnh phối cảnh:")
     add_bullet(doc, "Kiểm tra độ khớp lưới bọt và 25 marker phụ theo file layout thpt50.json trích từ PDF gốc trước khi đọc; đo độ tương phản mực nội vùng (Relative Ink Contrast) ở tâm từng ô; nhận diện chính xác ô được chọn, câu bỏ trống (None), câu tô trùng (['A', 'B']) và cảnh báo vết tẩy lem nhem hoặc tô chì mờ; bóc tách SBD (6 số) và Mã đề (3 số).", bold_prefix="Chức năng 3 - Nhận diện đáp án OMR (1 - 50 câu):")
     add_bullet(doc, "Xử lý hàng loạt hàng chục/hàng trăm bài thi cùng lúc trên luồng nền (threading.Thread), tuyệt đối không làm đơ hoặc treo giao diện Desktop; thanh tiến trình ProgressBar hiển thị tỷ lệ % thời gian thực; cơ chế chống dừng đột ngột (Fault Tolerance): nếu 1 ảnh bị lỗi rách góc hoặc khuyết marker, hệ thống ghi nhận lỗi vào bảng và tự động tiếp tục chấm các bài còn lại.", bold_prefix="Chức năng 4 - Xử lý theo lô đa luồng an toàn (Batch Processing):")
-    add_bullet(doc, "Tự động so khớp với đáp án chuẩn theo thang điểm 10.0 (mỗi câu đúng được +10/N điểm); phân loại học lực (Xuất sắc >= 9.0, Giỏi >= 8.0, Khá >= 6.5, Trung bình >= 5.0, Yếu < 5.0); hỗ trợ tính năng tự quét đáp án từ ảnh phiếu giáo viên; xuất file Excel chuyên nghiệp gồm 3 Sheet (Bang_Diem_Tong_Hop, Chi_Tiet_Bai_Lam, Thong_Ke_Pho_Diem).", bold_prefix="Chức năng 5 - Chấm điểm tự động và xuất báo cáo Excel 3 Sheet:")
+    add_bullet(doc, "T\u1ef1 \u0111\u1ed9ng so kh\u1edbp \u0111\u00e1p \u00e1n theo thang \u0111i\u1ec3m 10.0 (+10/N \u0111i\u1ec3m/c\u00e2u); ph\u00e2n lo\u1ea1i h\u1ecdc l\u1ef1c (Gi\u1ecfi, Kh\u00e1, Trung b\u00ecnh, Y\u1ebfu); h\u1ed7 tr\u1ee3 t\u1ef1 qu\u00e9t \u0111\u00e1p \u00e1n t\u1eeb phi\u1ebfu gi\u00e1o vi\u00ean v\u00e0 xu\u1ea5t b\u00e1o c\u00e1o Excel 3 Sheet.", bold_prefix="Ch\u1ee9c n\u0103ng 5 - Ch\u1ea5m \u0111i\u1ec3m t\u1ef1 \u0111\u1ed9ng v\u00e0 xu\u1ea5t Excel:")
 
     add_image_figure(doc, str(ROOT / "demo_output" / "figures" / "hinh_2_1_kien_truc_he_thong.png"),
                      "Hình 2.1. Sơ đồ kiến trúc tổng thể 4 tầng của hệ thống chấm phiếu FormTHPT50", width_in=6.0)
 
     add_h3(doc, "2.1.3. Yêu cầu phi chức năng")
     add_bullet(doc, "Thời gian thực thi trọn gói cho một bài thi (tiền xử lý, nắn phẳng, OMR, chấm điểm và vẽ overlay) không vượt quá 0.5 giây trên cấu hình máy tính cá nhân thông thường.", bold_prefix="Hiệu năng thời gian:")
-    add_bullet(doc, "Đạt độ chính xác nhận diện OMR trên 98% đối với các bài thi tô chì đúng quy cách (bút chì 2B trở lên), kháng chịu tốt góc chụp nghiêng tới 30 độ và bóng đổ che khuất.", bold_prefix="Độ chính xác và tin cậy:")
+    add_bullet(doc, "Đánh giá độ chính xác nhận diện OMR trên bài tô đúng quy cách, ảnh nghiêng và ảnh có bóng đổ bằng các tập dữ liệu thực nghiệm.", bold_prefix="Độ chính xác và tin cậy:")
     add_bullet(doc, "Mọi tác vụ xử lý ảnh nặng và chấm theo lô phải được cô lập hoàn toàn trên Background Worker Thread, cập nhật trạng thái UI an toàn qua cơ chế callback (self.after trong Tkinter), loại trừ triệt để tình trạng Race Condition hay Deadlock.", bold_prefix="Tính an toàn đa luồng (Thread-safety):")
     add_bullet(doc, "Toàn bộ đường dẫn dữ liệu, tài nguyên mẫu và thư mục xuất báo cáo được tính toán tương đối dựa trên PROJECT_ROOT; đọc/ghi ảnh bằng OpenCV qua bộ đệm nhị phân numpy đảm bảo hoạt động trơn tru trên mọi hệ điều hành (Windows, Linux, macOS) mà không gặp lỗi bảng mã tiếng Việt.", bold_prefix="Tính độc lập nền tảng và tương thích UTF-8:")
 
@@ -576,7 +569,6 @@ def build_report():
     add_bullet(doc, "Thư viện thị giác máy tính mã nguồn mở hàng đầu thế giới. Đề tài khai thác các module cv2.cvtColor, cv2.GaussianBlur, cv2.adaptiveThreshold, cv2.findContours, cv2.getPerspectiveTransform, cv2.warpPerspective và cv2.rotate.", bold_prefix="OpenCV (opencv-python 4.x / 5.x):")
     add_bullet(doc, "Thư viện GUI hiện đại phát triển dựa trên Tkinter, cung cấp các widget bo góc mượt mà, hỗ trợ tự động chế độ Dark Mode và Light Mode, mang lại trải nghiệm người dùng chuyên nghiệp.", bold_prefix="CustomTkinter (ctk):")
     add_bullet(doc, "Thư viện chuyên dụng để tạo và định dạng file bảng tính Microsoft Excel (.xlsx), hỗ trợ đổ màu ô (PatternFill), kẻ viền (Border), căn lề (Alignment) và quản lý nhiều trang tính (multi-sheet).", bold_prefix="OpenPyXL:")
-    add_bullet(doc, "Khung kiểm thử tự động phục vụ xây dựng các ca kiểm thử hồi quy (Unit Test và Integration Test), đảm bảo tính ổn định tuyệt đối của mọi hàm toán học và thuật toán xử lý.", bold_prefix="Bộ công cụ Pytest:")
     add_bullet(doc, "Thư viện tính toán mảng đa chiều hiệu năng cao hỗ trợ xử lý ma trận điểm ảnh tốc độ C.", bold_prefix="NumPy & Pillow:")
 
     doc.add_page_break()
@@ -612,8 +604,6 @@ def build_report():
         "|   |-- layouts/thpt50_debug.png       # Ảnh trực quan hóa ma trận tọa độ lưới bọt\n"
         "|   |-- phieu_50_cau_chuan.png         # Phiếu thi trắng FormTHPT50 tiêu chuẩn\n"
         "|   |-- phieu_dap_an_mau_giao_vien.png # Phiếu đáp án mẫu của giáo viên\n"
-        "|-- tests/                             # Bộ kiểm thử tự động\n"
-        "|   |-- test_omr_50_cau.py             # 27 ca kiểm thử tự động toàn diện (Pytest)\n"
         "|-- tools/                             # Công cụ phụ trợ\n"
         "|   |-- build_layout_from_pdf.py       # Trích xuất layout pixel từ file vector PDF\n"
         "|-- main.py                            # Điểm khởi chạy chính của chương trình\n"
@@ -699,8 +689,7 @@ def build_report():
         "    # Tính điểm quy đổi chuẩn theo thang 10.0\n"
         "    score = round((correct_count / total_questions) * 10.0, 2)\n"
         "    # Phân loại học lực sư phạm\n"
-        "    classification = ('Xuất sắc' if score >= 9.0 else\n"
-        "                      'Giỏi' if score >= 8.0 else\n"
+        "    classification = ('Gi\u1ecfi' if score >= 8.0 else\n"
         "                      'Khá' if score >= 6.5 else\n"
         "                      'Trung bình' if score >= 5.0 else 'Yếu')\n"
         "    return Submission(correct_count=correct_count, score=score, classification=classification, ...)"
@@ -740,53 +729,8 @@ def build_report():
     add_image_figure(doc, str(ROOT / "demo_output" / "test_tgmt_aligned.png"),
                      "Hình 3.3. Ảnh bài thi sau khi nắn phẳng phối cảnh bằng 4 Marker định vị góc (Canvas 1653 x 2337 px)", width_in=4.0)
 
-    add_h3(doc, "3.3.2. Kết quả kiểm thử tự động Unit Tests (27/27 test cases)")
-    add_p(doc, "Toàn bộ hệ thống được kiểm thử tự động với bộ công cụ Pytest trong file tests/test_omr_50_cau.py. Kết quả chạy thực tế trên máy tính phát triển cho thấy toàn bộ 27/27 test cases đều đạt trạng thái PASSED 100% trong thời gian 7.55 giây. Bảng 3.3 tổng hợp chi tiết các nhóm kiểm thử chính:")
 
-    test_data = [
-        ["1", "Kiểm tra kích thước canvas & bố cục thpt50.json", "Đảm bảo canvas đạt 1653x2337 px, 2 khối 25 câu, 25 marker phụ.", "PASSED"],
-        ["2", "Đọc toàn diện bài thi chuẩn phẳng (SBD, Mã đề, 50 câu)", "Đạt độ chính xác 100%, độ tin cậy block confidence >= 0.98.", "PASSED"],
-        ["3", "Kiểm thử số câu linh hoạt (10, 20, 30, 40, 50 câu)", "Hệ thống bóc tách chính xác N câu đầu tiên theo yêu cầu người dùng.", "PASSED"],
-        ["4", "Bắt lỗi vượt quá dung lượng (> 50 câu)", "Hệ thống ném ngoại lệ ValueError rõ ràng khi yêu cầu > 50 câu.", "PASSED"],
-        ["5", "Pipeline trọn gói chấm bài với số câu tùy biến", "So khớp đáp án, tính điểm thang 10.0 chính xác tuyệt đối.", "PASSED"],
-        ["6", "Nắn phối cảnh ảnh chụp điện thoại độ phân giải thấp", "Phục hồi thành công ảnh xiên góc về canvas chuẩn 1653x2337 px.", "PASSED"],
-        ["7", "Khôi phục ảnh bị xoay các hướng (90, 180, 270 độ)", "Thuật toán tự động đảo chiều về đúng chiều chuẩn của phiếu thi.", "PASSED"],
-        ["8", "Thử nghiệm ảnh thiếu sáng kết hợp bóng đổ gắt hình elip", "Độ chính xác nhận diện OMR vẫn đạt trên 98.0% trên toàn bộ 50 câu.", "PASSED"],
-        ["9", "Nhận diện vết chì mờ sau khi biến đổi phối cảnh", "Phát hiện chính xác vết chì nhạt nhờ thuật toán Relative Contrast.", "PASSED"],
-        ["10", "Xử lý câu tô trùng nhiều đáp án (Multiple Marks)", "Ghi nhận đúng mảng ['A', 'B'] và kích hoạt cờ needs_review.", "PASSED"],
-        ["11", "Từ chối ảnh không đúng mẫu mà không đoán mò", "Từ chối chấm ảnh trắng hoặc sai mẫu, layout_source='unrecognized'.", "PASSED"],
-        ["12", "Kháng nhiễu vật thể lạ hình chữ nhật xung quanh marker", "Loại bỏ hoàn toàn các khung hình chữ nhật gây nhiễu ngoài nền.", "PASSED"]
-    ]
-    add_table_data(doc, ["STT", "Mục tiêu kiểm thử chức năng", "Kết quả thực nghiệm", "Trạng thái"], test_data, [0.6, 2.7, 2.3, 0.7],
-                   caption="Bảng 3.3. Bảng tổng hợp kết quả 27 ca kiểm thử tự động (Unit Tests)")
-
-    add_h3(doc, "3.3.3. Đánh giá hiệu năng thời gian và độ chính xác nhận diện")
-    add_p(doc, "Hệ thống được đo đạc định lượng trên máy tính cá nhân cấu hình tầm trung (CPU Intel Core i5, RAM 16GB, hệ điều hành Windows 11). Kết quả đo thời gian thực thi (latency) chi tiết cho từng công đoạn xử lý được ghi nhận trong Bảng 3.4:")
-
-    time_data = [
-        ["1. Tiền xử lý & Nắn phẳng phối cảnh", "0.082 giây", "37.3%", "Đọc ảnh UTF-8, Gaussian Blur, phát hiện 4 marker, warpPerspective."],
-        ["2. Xác thực lưới & Bóc tách OMR", "0.088 giây", "40.0%", "Đo Relative Contrast cho 200 ô trắc nghiệm, 60 ô SBD, 30 ô mã đề."],
-        ["3. Chấm điểm & Xếp loại học lực", "0.005 giây", "2.3%", "So khớp mảng đáp án, tính điểm thang 10.0 và phân loại học lực."],
-        ["4. Vẽ Overlay kết quả bài thi", "0.045 giây", "20.4%", "Vẽ vòng tròn màu xanh/đỏ/vàng, đóng dấu banner điểm số."],
-        ["TỔNG THỜI GIAN TRUNG BÌNH", "0.220 giây", "100.0%", "Hoàn thành xử lý trọn gói 1 bài thi 50 câu chỉ trong ~0.22 giây!"]
-    ]
-    add_table_data(doc, ["Công đoạn xử lý trong Pipeline", "Thời gian trung bình", "Tỷ lệ thời gian", "Nội dung công việc kỹ thuật"], time_data, [2.2, 1.2, 1.0, 1.9],
-                   caption="Bảng 3.4. Bảng đo thời gian thực thi (latency) chi tiết từng công đoạn trong pipeline")
-
-    add_p(doc, "Bảng 3.5 tổng hợp độ chính xác nhận diện OMR trên các tập dữ liệu thử nghiệm khác nhau, đối chiếu giữa phương pháp Ngưỡng cố định (Fixed Threshold) truyền thống và phương pháp Độ tương phản mực nội vùng (Relative Ink Contrast) của đề tài:")
-
-    acc_data = [
-        ["Tập 1: Ảnh scan phẳng chuẩn", "100 bài", "98.5%", "99.8%", "+1.3%"],
-        ["Tập 2: Ảnh chụp nghiêng góc 15-30 độ", "100 bài", "91.2%", "98.9%", "+7.7%"],
-        ["Tập 3: Ảnh xoay các hướng (90, 180, 270)", "50 bài", "0.0% (Lỗi hướng)", "99.2%", "+99.2%"],
-        ["Tập 4: Ảnh thiếu sáng & bóng đổ gắt", "100 bài", "74.6% (Bị đơ ngưỡng)", "98.4%", "+23.8%"],
-        ["Tập 5: Ảnh tẩy lem & tô mờ sát ngưỡng", "100 bài", "82.1% (Nhầm ô tẩy)", "98.1% (Bật cảnh báo)", "+16.0%"],
-        ["TRUNG BÌNH TOÀN BỘ CÁC TẬP", "450 bài", "69.3%", "99.1%", "+29.8%"]
-    ]
-    add_table_data(doc, ["Tập dữ liệu thử nghiệm", "Số lượng bài", "Ngưỡng cố định", "Đề tài (Relative Contrast)", "Mức cải thiện"], acc_data, [2.1, 0.9, 1.1, 1.4, 0.8],
-                   caption="Bảng 3.5. Bảng đánh giá độ chính xác nhận diện OMR trên các điều kiện thực nghiệm")
-
-    add_h3(doc, "3.3.4. Kết quả trực quan hóa overlay và xuất báo cáo Excel 3 Sheet")
+    add_h3(doc, "3.3.2. Kết quả trực quan hóa overlay và xuất báo cáo Excel 3 Sheet")
     add_p(doc, "Một trong những tính năng mang tính thực tiễn cao của phần mềm là cơ chế trực quan hóa kết quả bài làm (Visualizer Overlay). Sau khi chấm xong, hệ thống tạo ra ảnh kết quả có độ phân giải cao với các lớp phủ đồ họa trực quan (Hình 3.4):")
     add_bullet(doc, "Vòng tròn màu Xanh lá cây kèm dấu tick: Khoanh tròn vào ô học sinh đã làm đúng.", bold_prefix="• Câu trả lời đúng:")
     add_bullet(doc, "Vòng tròn màu Đỏ kèm dấu gạch chéo: Khoanh tròn vào ô học sinh đã làm sai hoặc câu tô trùng nhiều đáp án.", bold_prefix="• Câu trả lời sai:")
@@ -797,7 +741,7 @@ def build_report():
                      "Hình 3.4. Kết quả trực quan hóa bài làm sau khi chấm với overlay vòng tròn và banner điểm", width_in=4.2)
 
     add_p(doc, "File báo cáo kết quả thi xuất ra định dạng Microsoft Excel (.xlsx) được tổ chức thành 3 Sheet chuyên nghiệp theo đúng chuẩn quản lý khảo thí (Hình 3.5):")
-    add_bullet(doc, "Bảng điểm tổng quan của toàn bộ học sinh trong đợt thi: STT, Mã học sinh, Tên file ảnh, Số báo danh, Mã đề, Số câu đúng, Số câu sai, Số câu bỏ trống, Tổng điểm (thang 10.0), Xếp loại học lực (Xuất sắc, Giỏi, Khá, Trung bình, Yếu) và Cột trạng thái kèm ghi chú cảnh báo chi tiết.", bold_prefix="Sheet 1 - Bang_Diem_Tong_Hop:")
+    add_bullet(doc, "Bảng điểm tổng quan của toàn bộ học sinh trong đợt thi: STT, Mã học sinh, Tên file ảnh, Số báo danh, Mã đề, Số câu đúng, Số câu sai, Số câu bỏ trống, Tổng điểm (thang 10.0), Xếp loại học lực (Giỏi, Khá, Trung bình, Yếu) và Cột trạng thái kèm ghi chú cảnh báo chi tiết.", bold_prefix="Sheet 1 - Bang_Diem_Tong_Hop:")
     add_bullet(doc, "Ma trận chi tiết phương án trả lời của từng học sinh ở từng câu hỏi từ 1 đến N. Tự động áp dụng định dạng có điều kiện (Conditional Formatting): ô được tô màu XANH LÁ nếu học sinh làm đúng, và tô màu ĐỎ NHẠT nếu học sinh làm sai hoặc tô trùng nhiều đáp án.", bold_prefix="Sheet 2 - Chi_Tiet_Bai_Lam:")
     add_bullet(doc, "Báo cáo thống kê sư phạm toàn diện: Điểm trung bình của lớp, Điểm cao nhất, Điểm thấp nhất; Bảng phân bố phổ điểm chia làm 10 khoảng (0-1, 1-2, ..., 9-10); Tỷ lệ % học sinh theo từng bậc xếp loại; và Ma trận tỷ lệ % làm đúng theo từng câu hỏi, giúp giáo viên đánh giá được độ khó của đề thi và phát hiện các câu hỏi học sinh hay làm sai để củng cố kiến thức.", bold_prefix="Sheet 3 - Thong_Ke_Pho_Diem:")
 
@@ -816,8 +760,7 @@ def build_report():
     add_bullet(doc, "Phần mềm đáp ứng đầy đủ và vượt trội 5 chức năng cốt lõi theo đề bài: 1. Quản lý ảnh bài thi linh hoạt; 2. Tiền xử lý và căn chỉnh phối cảnh 4 Marker tự động; 3. Bóc tách OMR thông minh 1-50 câu; 4. Xử lý theo lô đa luồng an toàn (Batch Processing Thread-safe); 5. Chấm điểm tự động và xuất báo cáo Excel 3 Sheet chuyên nghiệp.", bold_prefix="1. Hoàn thành trọn vẹn 5 chức năng:")
     add_bullet(doc, "Giải quyết triệt để thách thức biến dạng hình học khi chụp ảnh bằng camera điện thoại thông qua giải thuật nắn phẳng phối cảnh 4 Marker góc và tự động nhận diện hướng xoay 90, 180, 270 độ.", bold_prefix="2. Làm chủ thuật toán căn chỉnh hình học:")
     add_bullet(doc, "Đề xuất và hiện thực hóa thành công thuật toán đo độ tương phản mực nội vùng (Relative Ink Contrast), giúp hệ thống kháng chịu xuất sắc các điều kiện ánh sáng yếu, bóng đổ gắt và hiện tượng tẩy chì lem nhem.", bold_prefix="3. Đột phá về giải thuật OMR kháng nhiễu:")
-    add_bullet(doc, "Thời gian xử lý trọn gói chỉ ~0.22 giây cho một bài thi 50 câu; độ chính xác nhận diện OMR đạt trên 99.1% trên toàn bộ các tập dữ liệu thử thách; 27/27 ca kiểm thử tự động với Pytest đều đạt 100% Passed.", bold_prefix="4. Hiệu năng vượt trội và độ tin cậy cao:")
-    add_bullet(doc, "Ứng dụng Desktop bằng CustomTkinter có giao diện mượt mà, trực quan, hỗ trợ chế độ Dark/Light Mode, xem ảnh overlay sinh động và xuất báo cáo Excel 3 Sheet chuẩn mực.", bold_prefix="5. Sản phẩm ứng dụng hoàn chỉnh:")
+    add_bullet(doc, "Ứng dụng Desktop bằng CustomTkinter có giao diện mượt mà, trực quan, hỗ trợ chế độ Dark/Light Mode, xem ảnh overlay sinh động và xuất báo cáo Excel 3 Sheet chuẩn mực.", bold_prefix="4. Sản phẩm ứng dụng hoàn chỉnh:")
 
     add_h2(doc, "2. Những tồn tại và hạn chế")
     add_p(doc, "Bên cạnh những thành công đáng khích lệ, nhóm cũng thẳng thắn nhìn nhận hệ thống vẫn còn một số điểm hạn chế cần tiếp tục nghiên cứu khắc phục:")
@@ -859,11 +802,10 @@ def build_report():
          "• Định dạng màu tự động (Conditional Formatting) trong file Excel.\n"
          "• Quản lý lưu trữ độc lập nền tảng với đường dẫn PROJECT_ROOT.\n"
          "• Xây dựng module sinh dữ liệu mẫu và phiếu đáp án GV.", "100%", "8.5", "Lê Viết Quân"],
-        ["4", "Nguyễn Văn Thành\nMSSV: 215748020110105", "Thành viên\n(Frontend & Testing)", 
+        ["4", "Nguyễn Văn Thành\nMSSV: 215748020110105", "Thành viên\n(Frontend & Integration)",
          "• Thiết kế giao diện Desktop CustomTkinter theo quy trình 3 bước (app.py).\n"
          "• Xử lý Batch Processing đa luồng Thread-safe mượt mà không đơ UI.\n"
          "• Tích hợp tính năng chụp màn hình và dán ảnh clipboard Ctrl+V.\n"
-         "• Xây dựng và chạy bộ kiểm thử tự động 27 unit tests (Pytest 100% Passed).\n"
          "• Đóng gói và tích hợp toàn bộ hệ thống vào điểm chạy main.py.", "100%", "8.5", "Nguyễn Văn Thành"]
     ]
     add_table_data(doc, ["STT", "Họ và tên & MSSV", "Vai trò phụ trách", "Nhiệm vụ kỹ thuật hoàn thành chi tiết", "Đóng góp", "Điểm tự chấm", "Chữ ký"], 
@@ -884,12 +826,11 @@ def build_report():
         "[2] Gary Bradski, Adrian Kaehler (2008), Learning OpenCV: Computer Vision with the OpenCV Library, O'Reilly Media, Sebastopol, CA.",
         "[3] Bradski, G. (2000), 'The OpenCV Library', Dr. Dobb's Journal of Software Tools, Vol. 25, No. 11, pp. 120-125.",
         "[4] Otsu, N. (1979), 'A threshold selection method from gray-level histograms', IEEE Transactions on Systems, Man, and Cybernetics, Vol. 9, No. 1, pp. 62-66.",
-        "[5] Carsten Rother, Vladimir Kolmogorov, Andrew Blake (2004), '\"GrabCut\": Interactive Foreground Extraction using Iterated Graph Cuts', ACM Transactions on Graphics (SIGGRAPH '04), Vol. 23, No. 3, pp. 309-314.",
-        "[6] Tom Schimansky (2023), CustomTkinter Documentation and UI Framework for Python, GitHub Repository: https://github.com/TomSchimansky/CustomTkinter.",
-        "[7] Eric Gazoni, Charlie Clark (2023), openpyxl - A Python library to read/write Excel 2010 xlsx/xlsm/xltx/xltm files, Documentation: https://openpyxl.readthedocs.io/.",
-        "[8] Bộ Giáo dục và Đào tạo (2024), Quy chế thi tốt nghiệp Trung học phổ thông và quy định cấu trúc đề thi trắc nghiệm chuẩn quốc gia, Hà Nội.",
-        "[9] Nguyễn Thị Minh Tâm (2024), Bài giảng học phần Thị giác máy tính, Viện Kỹ thuật và Công nghệ - Trường Đại học Vinh.",
-        "[10] Ian Sommerville (2011), Software Engineering, 9th Edition, Addison-Wesley, Boston, USA."
+        "[5] Tom Schimansky (2023), CustomTkinter Documentation and UI Framework for Python, GitHub Repository: https://github.com/TomSchimansky/CustomTkinter.",
+        "[6] Eric Gazoni, Charlie Clark (2023), openpyxl - A Python library to read/write Excel 2010 xlsx/xlsm/xltx/xltm files, Documentation: https://openpyxl.readthedocs.io/.",
+        "[7] Bộ Giáo dục và Đào tạo (2024), Quy chế thi tốt nghiệp Trung học phổ thông và quy định cấu trúc đề thi trắc nghiệm chuẩn quốc gia, Hà Nội.",
+        "[8] Nguyễn Thị Minh Tâm (2024), Bài giảng học phần Thị giác máy tính, Viện Kỹ thuật và Công nghệ - Trường Đại học Vinh.",
+        "[9] Ian Sommerville (2011), Software Engineering, 9th Edition, Addison-Wesley, Boston, USA."
     ]
     
     for r_text in refs:
@@ -904,6 +845,7 @@ def build_report():
         r.font.size = Pt(12)
         r.font.color.rgb = RGBColor(30, 30, 30)
 
+    normalize_academic_body(doc)
     # Save to Bao_Cao_Do_An_TGMT_ChamTracNgiem.docx
     out_path = ROOT / "Bao_Cao_Do_An_TGMT_ChamTracNgiem.docx"
     doc.save(str(out_path))

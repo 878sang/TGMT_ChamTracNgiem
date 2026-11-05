@@ -91,8 +91,6 @@ Do An/
 │   ├── layouts/thpt50.json            # Layout pixel lấy từ PDF FormTHPT50
 │   └── layouts/thpt50_base.png        # Nền phiếu chuẩn dùng để tạo phiếu trắng
 │
-├── tests/
-│   └── test_omr_50_cau.py             # Unit test cho FormTHPT50
 ├── tools/
 │   ├── build_layout_from_pdf.py       # Trích xuất layout từ PDF nguồn
 │   ├── build_concise_report.py        # Tạo báo cáo phiên bản ngắn
@@ -124,8 +122,5 @@ python main.py
    - Click đúp vào một học sinh để xem ảnh bài làm đã được vẽ khoanh chấm màu (Xanh = Đúng, Đỏ = Sai/Tô trùng).
    - Bấm `📊 Xuất kết quả (Excel)` để lưu file báo cáo 3 Sheet.
 
-### 4. Chạy kiểm thử tự động (Unit Tests)
 ```bash
-python tests/test_omr_50_cau.py
 ```
-Toàn bộ 12 test case tương ứng với 5 chức năng đều đạt trạng thái `OK (100% Passed)`.

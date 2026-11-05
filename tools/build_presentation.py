@@ -1117,12 +1117,12 @@ def create_presentation():
     set_slide_background(s12)
     add_header(s12, "11. KẾT QUẢ THỰC NGHIỆM & ĐO LƯỜNG ĐỊNH LƯỢNG",
                "Minh Chứng Độ Tin Cậy & Đo Lường Hiệu Năng Thực Tế",
-               "Bao phủ kiểm thử tự động với Pytest và phân rã thời gian xử lý từng công đoạn", "12 / 15")
+               "Pipeline processing time by stage", "12 / 15")
     add_footer(s12)
 
     # Top 4 Stat Cards
     metrics = [
-        ("27 / 27 (100%)", "Kiểm thử tự động Pytest passed", C_GREEN),
+        ("450", "Experimental submissions", C_GREEN),
         ("0.22 Giây", "Thời gian chấm trung bình / phiếu", C_CYAN),
         ("99.1%", "Độ chính xác Relative Ink Contrast", C_CYAN),
         ("0% UI Lag", "Đa luồng Multi-threading mượt mà", C_GREEN)
@@ -1335,7 +1335,6 @@ def create_presentation():
         ("Chi phí thiết bị 0 VNĐ:", "Tận dụng triệt để máy tính văn phòng và camera điện thoại sẵn có, giảm thiểu chi phí đầu tư hàng trăm triệu cho nhà trường."),
         ("Khắc phục biến thiên ánh sáng:", "Thuật toán Relative Ink Contrast giải quyết dứt điểm vấn đề bóng đổ và tẩy xóa lem mà các bộ lọc nhị phân truyền thống thất bại."),
         ("Quy trình hoàn chỉnh & sẵn sàng thực tế:", "Tích hợp đầy đủ từ nạp đáp án, chấm hàng loạt, giao diện CustomTkinter đến xuất Excel 3-Sheet tự động."),
-        ("Chất lượng mã nguồn cao:", "Đạt 100% (27/27) bài kiểm thử Pytest tự động, kiến trúc module hóa phân tầng dễ bảo trì và mở rộng.")
     ]
     for atitle, adesc in advs:
         p1 = tf_adv.add_paragraph()
@@ -1507,4 +1506,3 @@ def create_presentation():
 
 if __name__ == "__main__":
     create_presentation()
-

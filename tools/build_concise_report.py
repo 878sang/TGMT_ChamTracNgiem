@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 import docx
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml import OxmlElement, parse_xml
@@ -21,7 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def create_document():
     doc = docx.Document()
-    
+    doc.styles["Normal"].font.name = "Times New Roman"
+    doc.styles["Normal"].font.size = Pt(13)
+
     # Setup Page A4 & Academic Margins
     for section in doc.sections:
         section.page_width = Inches(8.27)
@@ -30,7 +32,7 @@ def create_document():
         section.bottom_margin = Inches(0.79)   # 2.0 cm
         section.left_margin = Inches(1.18)     # 3.0 cm
         section.right_margin = Inches(0.79)    # 2.0 cm
-        
+
         # Header
         header = section.header
         p_hdr = header.paragraphs[0]
@@ -41,7 +43,7 @@ def create_document():
         r_hdr.font.size = Pt(8.5)
         r_hdr.font.italic = True
         r_hdr.font.color.rgb = RGBColor(120, 120, 120)
-        
+
         # Footer
         footer = section.footer
         p_ftr = footer.paragraphs[0]
@@ -51,7 +53,7 @@ def create_document():
         r_ftr_lbl.font.name = "Times New Roman"
         r_ftr_lbl.font.size = Pt(9)
         r_ftr_lbl.font.color.rgb = RGBColor(100, 100, 100)
-        
+
         r_pg = p_ftr.add_run()
         r_pg.font.name = "Times New Roman"
         r_pg.font.size = Pt(9)
@@ -67,8 +69,8 @@ def create_document():
 
     return doc
 
-def add_p(doc, text, bold_prefix=None, italic=False, space_after=3, space_before=0, 
-          first_line_indent=True, align=WD_ALIGN_PARAGRAPH.JUSTIFY, font_size=12.5, line_spacing=1.3):
+def add_p(doc, text, bold_prefix=None, italic=False, space_after=3, space_before=3,
+          first_line_indent=True, align=WD_ALIGN_PARAGRAPH.JUSTIFY, font_size=13, line_spacing=1.3):
     p = doc.add_paragraph()
     p.alignment = align
     pf = p.paragraph_format
@@ -77,14 +79,14 @@ def add_p(doc, text, bold_prefix=None, italic=False, space_after=3, space_before
     pf.line_spacing = line_spacing
     if first_line_indent:
         pf.first_line_indent = Inches(0.4)
-    
+
     if bold_prefix:
         r_bp = p.add_run(bold_prefix)
         r_bp.font.name = "Times New Roman"
         r_bp.font.size = Pt(font_size)
         r_bp.font.bold = True
         r_bp.font.color.rgb = RGBColor(0, 0, 0)
-    
+
     if text:
         r = p.add_run(text)
         r.font.name = "Times New Roman"
@@ -93,36 +95,36 @@ def add_p(doc, text, bold_prefix=None, italic=False, space_after=3, space_before
         r.font.color.rgb = RGBColor(30, 30, 30)
     return p
 
-def add_bullet(doc, text, bold_prefix=None, space_after=2):
+def add_bullet(doc, text, bold_prefix=None, space_after=3):
     p = doc.add_paragraph(style='List Paragraph')
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     pf = p.paragraph_format
     pf.space_after = Pt(space_after)
-    pf.space_before = Pt(0)
-    pf.line_spacing = 1.25
+    pf.space_before = Pt(3)
+    pf.line_spacing = 1.3
     pf.left_indent = Inches(0.35)
     pf.first_line_indent = Inches(-0.2)
-    
+
     r_bullet = p.add_run("• ")
     r_bullet.font.name = "Times New Roman"
-    r_bullet.font.size = Pt(12.5)
+    r_bullet.font.size = Pt(13)
     r_bullet.font.bold = True
     r_bullet.font.color.rgb = RGBColor(31, 78, 120)
 
     if bold_prefix:
         r_bp = p.add_run(bold_prefix + " ")
         r_bp.font.name = "Times New Roman"
-        r_bp.font.size = Pt(12.5)
+        r_bp.font.size = Pt(13)
         r_bp.font.bold = True
         r_bp.font.color.rgb = RGBColor(0, 0, 0)
-        
+
     r = p.add_run(text)
     r.font.name = "Times New Roman"
-    r.font.size = Pt(12.5)
+    r.font.size = Pt(13)
     r.font.color.rgb = RGBColor(30, 30, 30)
     return p
 
-def add_h1(doc, text, space_before=10, space_after=4):
+def add_h1(doc, text, space_before=3, space_after=3):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     pf = p.paragraph_format
@@ -131,12 +133,12 @@ def add_h1(doc, text, space_before=10, space_after=4):
     pf.keep_with_next = True
     r = p.add_run(text)
     r.font.name = "Times New Roman"
-    r.font.size = Pt(14.0)
+    r.font.size = Pt(13.0)
     r.font.bold = True
     r.font.color.rgb = RGBColor(0, 51, 102)
     return p
 
-def add_h2(doc, text, space_before=7, space_after=3):
+def add_h2(doc, text, space_before=3, space_after=3):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     pf = p.paragraph_format
@@ -150,7 +152,7 @@ def add_h2(doc, text, space_before=7, space_after=3):
     r.font.color.rgb = RGBColor(31, 78, 120)
     return p
 
-def add_h3(doc, text, space_before=5, space_after=2):
+def add_h3(doc, text, space_before=3, space_after=3):
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
     pf = p.paragraph_format
@@ -159,7 +161,7 @@ def add_h3(doc, text, space_before=5, space_after=2):
     pf.keep_with_next = True
     r = p.add_run(text)
     r.font.name = "Times New Roman"
-    r.font.size = Pt(12.5)
+    r.font.size = Pt(13)
     r.font.bold = True
     r.font.italic = True
     r.font.color.rgb = RGBColor(0, 0, 0)
@@ -170,11 +172,11 @@ def add_code_block(doc, code_str):
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     cell = tbl.cell(0, 0)
     cell.width = Inches(6.3)
-    
+
     tcPr = cell._tc.get_or_add_tcPr()
     shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="F8FAFC"/>')
     tcPr.append(shd)
-    
+
     borders = parse_xml(
         f'<w:tcBorders {nsdecls("w")}>'
         f'  <w:left w:val="single" w:sz="12" w:space="0" w:color="0284C7"/>'
@@ -184,7 +186,7 @@ def add_code_block(doc, code_str):
         f'</w:tcBorders>'
     )
     tcPr.append(borders)
-    
+
     tcMar = OxmlElement('w:tcMar')
     for m, v in [('w:top', 80), ('w:bottom', 80), ('w:left', 140), ('w:right', 140)]:
         node = OxmlElement(m)
@@ -192,19 +194,19 @@ def add_code_block(doc, code_str):
         node.set(qn('w:type'), 'dxa')
         tcMar.append(node)
     tcPr.append(tcMar)
-    
+
     p = cell.paragraphs[0]
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after = Pt(0)
-    p.paragraph_format.line_spacing = 1.15
+    p.paragraph_format.space_before = Pt(3)
+    p.paragraph_format.space_after = Pt(3)
+    p.paragraph_format.line_spacing = 1.3
     for i, line in enumerate(code_str.strip().split('\n')):
         if i > 0:
             p.add_run('\n')
         r = p.add_run(line)
-        r.font.name = "Consolas"
-        r.font.size = Pt(9.0)
+        r.font.name = "Times New Roman"
+        r.font.size = Pt(13)
         r.font.color.rgb = RGBColor(30, 41, 59)
-    
+
     p_after = doc.add_paragraph()
     p_after.paragraph_format.space_before = Pt(0)
     p_after.paragraph_format.space_after = Pt(2)
@@ -214,20 +216,20 @@ def add_image_figure(doc, img_path, caption_text, width_in=5.2):
         return
     p_img = doc.add_paragraph()
     p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_img.paragraph_format.space_before = Pt(4)
-    p_img.paragraph_format.space_after = Pt(2)
+    p_img.paragraph_format.space_before = Pt(3)
+    p_img.paragraph_format.space_after = Pt(3)
     p_img.paragraph_format.first_line_indent = Inches(0)
     run_img = p_img.add_run()
     run_img.add_picture(img_path, width=Inches(width_in))
-    
+
     p_cap = doc.add_paragraph()
     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_cap.paragraph_format.space_before = Pt(2)
-    p_cap.paragraph_format.space_after = Pt(6)
+    p_cap.paragraph_format.space_before = Pt(3)
+    p_cap.paragraph_format.space_after = Pt(3)
     p_cap.paragraph_format.first_line_indent = Inches(0)
     r_cap = p_cap.add_run(caption_text)
     r_cap.font.name = "Times New Roman"
-    r_cap.font.size = Pt(10.5)
+    r_cap.font.size = Pt(13)
     r_cap.font.italic = True
     r_cap.font.bold = True
     r_cap.font.color.rgb = RGBColor(31, 78, 120)
@@ -241,18 +243,18 @@ def add_table_data(doc, headers, data, col_widths=None, caption=None):
         p_cap.paragraph_format.first_line_indent = Inches(0)
         r_cap = p_cap.add_run(caption)
         r_cap.font.name = "Times New Roman"
-        r_cap.font.size = Pt(11.0)
+        r_cap.font.size = Pt(13)
         r_cap.font.bold = True
         r_cap.font.color.rgb = RGBColor(0, 51, 102)
 
     tbl = doc.add_table(rows=len(data) + 1, cols=len(headers))
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
+
     hdr_row = tbl.rows[0]
     hdr_trPr = hdr_row._tr.get_or_add_trPr()
     hdr_trPr.append(parse_xml(f'<w:tblHeader {nsdecls("w")}/>'))
     hdr_trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
-    
+
     for c_idx, h_text in enumerate(headers):
         cell = hdr_row.cells[c_idx]
         if col_widths and c_idx < len(col_widths):
@@ -260,7 +262,7 @@ def add_table_data(doc, headers, data, col_widths=None, caption=None):
         tcPr = cell._tc.get_or_add_tcPr()
         shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="1F4E78"/>')
         tcPr.append(shd)
-        
+
         tcMar = OxmlElement('w:tcMar')
         for m, v in [('w:top', 80), ('w:bottom', 80), ('w:left', 120), ('w:right', 120)]:
             node = OxmlElement(m)
@@ -268,14 +270,14 @@ def add_table_data(doc, headers, data, col_widths=None, caption=None):
             node.set(qn('w:type'), 'dxa')
             tcMar.append(node)
         tcPr.append(tcMar)
-        
+
         p = cell.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.space_before = Pt(3)
+        p.paragraph_format.space_after = Pt(3)
         r = p.add_run(h_text)
         r.font.name = "Times New Roman"
-        r.font.size = Pt(10.5)
+        r.font.size = Pt(13)
         r.font.bold = True
         r.font.color.rgb = RGBColor(255, 255, 255)
         cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
@@ -292,7 +294,7 @@ def add_table_data(doc, headers, data, col_widths=None, caption=None):
             tcPr = cell._tc.get_or_add_tcPr()
             shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{bg_col}"/>')
             tcPr.append(shd)
-            
+
             tcMar = OxmlElement('w:tcMar')
             for m, v in [('w:top', 60), ('w:bottom', 60), ('w:left', 120), ('w:right', 120)]:
                 node = OxmlElement(m)
@@ -300,17 +302,18 @@ def add_table_data(doc, headers, data, col_widths=None, caption=None):
                 node.set(qn('w:type'), 'dxa')
                 tcMar.append(node)
             tcPr.append(tcMar)
-            
+
             p = cell.paragraphs[0]
-            p.paragraph_format.space_before = Pt(0)
-            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(3)
+            p.paragraph_format.space_after = Pt(3)
+            p.paragraph_format.line_spacing = 1.3
             if len(str(val)) <= 8 and (c_idx == 0 or str(val).replace('.', '').isdigit() or '%' in str(val)):
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             else:
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
             r = p.add_run(str(val))
             r.font.name = "Times New Roman"
-            r.font.size = Pt(10.5)
+            r.font.size = Pt(13)
             r.font.color.rgb = RGBColor(30, 30, 30)
             cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
@@ -326,15 +329,60 @@ def add_table_data(doc, headers, data, col_widths=None, caption=None):
         f'</w:tblBorders>'
     )
     tblPr.append(borders)
-    
+
     p_after = doc.add_paragraph()
-    p_after.paragraph_format.space_before = Pt(0)
-    p_after.paragraph_format.space_after = Pt(4)
+    p_after.paragraph_format.space_before = Pt(3)
+    p_after.paragraph_format.space_after = Pt(3)
+
+def normalize_academic_body(doc):
+    body_started = False
+    caption_prefixes = ("H" + chr(236) + "nh ", "B" + chr(7843) + "ng ")
+    body_anchor = "".join(chr(code) for code in (76, 7900, 73, 32, 67, 7842, 77, 32, 416, 78))
+    for paragraph in doc.paragraphs:
+        if paragraph.text.strip() == body_anchor:
+            body_started = True
+        if not body_started:
+            continue
+        fmt = paragraph.paragraph_format
+        fmt.line_spacing = 1.3
+        fmt.space_before = Pt(3)
+        fmt.space_after = Pt(3)
+        text = paragraph.text.strip()
+        first_token = text.split(maxsplit=1)[0] if text else ""
+        numbered_heading = first_token.rstrip(".").replace(".", "").isdigit() and not paragraph.style.name.startswith("List")
+        is_heading = paragraph.style.name.startswith("Heading") or text.isupper() or numbered_heading
+        is_caption = paragraph.text.strip().startswith(caption_prefixes)
+        is_list = paragraph.style.name.startswith("List") or paragraph.text.strip().startswith(("-", chr(8226)))
+        if is_heading or is_caption:
+            fmt.first_line_indent = Cm(0)
+        elif is_list:
+            fmt.left_indent = Cm(1)
+            fmt.first_line_indent = Cm(-0.5)
+        else:
+            fmt.first_line_indent = Cm(1)
+        if paragraph._p.xpath(".//w:drawing"):
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            fmt.first_line_indent = Cm(0)
+        for run in paragraph.runs:
+            run.font.name = "Times New Roman"
+            run.font.size = Pt(13)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    fmt = paragraph.paragraph_format
+                    fmt.line_spacing = 1.3
+                    fmt.space_before = Pt(3)
+                    fmt.space_after = Pt(3)
+                    fmt.first_line_indent = Cm(0)
+                    for run in paragraph.runs:
+                        run.font.name = "Times New Roman"
+                        run.font.size = Pt(13)
 
 def build_concise_report():
     print("Generating concise report (~22-24 pages)...")
     doc = create_document()
-    
+
     # -------------------------------------------------------------------------
     # 1. TRANG BÌA (1 TRANG)
     # -------------------------------------------------------------------------
@@ -347,21 +395,21 @@ def build_concise_report():
     r1.font.size = Pt(14)
     r1.font.bold = True
     r1.font.color.rgb = RGBColor(0, 51, 102)
-    
+
     r2 = p.add_run("VIỆN KỸ THUẬT VÀ CÔNG NGHỆ\n")
     r2.font.name = "Times New Roman"
     r2.font.size = Pt(14)
     r2.font.bold = True
     r2.font.color.rgb = RGBColor(0, 51, 102)
-    
+
     r3 = p.add_run("---------------***---------------")
     r3.font.name = "Times New Roman"
     r3.font.size = Pt(11)
     r3.font.color.rgb = RGBColor(120, 120, 120)
-    
+
     for _ in range(3):
         doc.add_paragraph().paragraph_format.space_after = Pt(0)
-        
+
     p_c = doc.add_paragraph()
     p_c.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_c.paragraph_format.space_after = Pt(4)
@@ -375,10 +423,10 @@ def build_concise_report():
     rc2.font.size = Pt(18)
     rc2.font.bold = True
     rc2.font.color.rgb = RGBColor(0, 51, 102)
-    
+
     for _ in range(2):
         doc.add_paragraph().paragraph_format.space_after = Pt(0)
-        
+
     p_t = doc.add_paragraph()
     p_t.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_t.paragraph_format.space_after = Pt(4)
@@ -388,35 +436,35 @@ def build_concise_report():
     rt1.font.size = Pt(13)
     rt1.font.bold = True
     rt1.font.color.rgb = RGBColor(100, 100, 100)
-    
+
     rt2 = p_t.add_run("HỆ THỐNG NHẬN DIỆN VÀ CHẤM PHIẾU THI TRẮC NGHIỆM TỰ ĐỘNG BẰNG PYTHON VÀ OPENCV\n")
     rt2.font.name = "Times New Roman"
     rt2.font.size = Pt(17)
     rt2.font.bold = True
     rt2.font.color.rgb = RGBColor(180, 0, 0)
-    
+
     rt3 = p_t.add_run("(Phần mềm chấm phiếu FormTHPT50 từ 1 đến 50 câu theo công nghệ OMR)")
     rt3.font.name = "Times New Roman"
     rt3.font.size = Pt(12)
     rt3.font.italic = True
-    
+
     for _ in range(3):
         doc.add_paragraph().paragraph_format.space_after = Pt(0)
-        
+
     tbl_meta = doc.add_table(rows=2, cols=2)
     tbl_meta.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl_meta.rows[0].cells[0].width = Inches(2.2)
     tbl_meta.rows[0].cells[1].width = Inches(4.1)
     tbl_meta.rows[1].cells[0].width = Inches(2.2)
     tbl_meta.rows[1].cells[1].width = Inches(4.1)
-    
+
     p00 = tbl_meta.cell(0, 0).paragraphs[0]
     r = p00.add_run("Cán bộ hướng dẫn (GVHD):")
     r.font.name = "Times New Roman"; r.font.size = Pt(12); r.font.bold = True
     p01 = tbl_meta.cell(0, 1).paragraphs[0]
     r = p01.add_run("Cô Nguyễn Thị Minh Tâm")
     r.font.name = "Times New Roman"; r.font.size = Pt(12); r.font.bold = True; r.font.color.rgb = RGBColor(0, 51, 102)
-    
+
     p10 = tbl_meta.cell(1, 0).paragraphs[0]
     r = p10.add_run("Nhóm sinh viên thực hiện:")
     r.font.name = "Times New Roman"; r.font.size = Pt(12); r.font.bold = True
@@ -431,9 +479,9 @@ def build_concise_report():
     for idx, m in enumerate(members):
         if idx > 0: p11.add_run("\n")
         rm = p11.add_run(m)
-        rm.font.name = "Times New Roman"; rm.font.size = Pt(11.5)
+        rm.font.name = "Times New Roman"; rm.font.size = Pt(13)
         if "Trưởng nhóm" in m: rm.font.bold = True
-            
+
     tblPr = tbl_meta._tbl.tblPr
     borders = parse_xml(
         f'<w:tblBorders {nsdecls("w")}>'
@@ -441,18 +489,18 @@ def build_concise_report():
         f'</w:tblBorders>'
     )
     tblPr.append(borders)
-    
+
     for _ in range(4):
         doc.add_paragraph().paragraph_format.space_after = Pt(0)
-        
+
     p_loc = doc.add_paragraph()
     p_loc.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_loc.paragraph_format.first_line_indent = Inches(0)
     r_loc = p_loc.add_run("Nghệ An, Tháng 11 Năm 2026")
-    r_loc.font.name = "Times New Roman"; r_loc.font.size = Pt(12.5); r_loc.font.bold = True
-    
+    r_loc.font.name = "Times New Roman"; r_loc.font.size = Pt(13); r_loc.font.bold = True
+
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 2. LỜI CẢM ƠN (TRANG 2)
     # -------------------------------------------------------------------------
@@ -460,7 +508,7 @@ def build_concise_report():
     add_p(doc, "Em xin chân thành cảm ơn Cô Nguyễn Thị Minh Tâm đã tận tình hướng dẫn, góp ý và thảo luận chuyên môn sâu sắc trong suốt quá trình nhóm triển khai đồ án học phần Thị giác máy tính. Dưới sự chỉ bảo tâm huyết của cô, chúng em không chỉ nắm vững các kiến thức nền tảng về xử lý ảnh số, biến đổi hình học không gian và nhận diện quang học OMR, mà còn được truyền cảm hứng sáng tạo để giải quyết các thách thức kỹ thuật thực tế trong công tác chấm thi tự động.")
     add_p(doc, "Chúng em cũng xin gửi lời cảm ơn tới các thầy cô giáo trong Viện Kỹ thuật và Công nghệ - Trường Đại học Vinh đã tạo điều kiện học tập và nghiên cứu thuận lợi. Mặc dù nhóm đã nỗ lực hoàn thiện đề tài ở mức cao nhất, nhưng do thời gian và kiến thức còn hạn chế nên bài tập khó tránh khỏi những thiếu sót. Chúng em rất mong nhận được những ý kiến đóng góp quý báu từ quý thầy cô để sản phẩm ngày càng hoàn thiện hơn.")
     add_p(doc, "Sau cùng, chúng em kính chúc Cô Nguyễn Thị Minh Tâm luôn dồi dào sức khỏe, niềm vui và tiếp tục đạt được nhiều thành tựu rực rỡ trong sự nghiệp giáo dục cao quý của mình!")
-    
+
     p_sig = doc.add_paragraph()
     p_sig.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_sig.paragraph_format.first_line_indent = Inches(0)
@@ -469,9 +517,9 @@ def build_concise_report():
     r.font.name = "Times New Roman"; r.font.size = Pt(12); r.font.italic = True
     r2 = p_sig.add_run("Hồ Tuấn Hiệp – Nguyễn Khắc Quốc Khánh\nLê Viết Quân – Nguyễn Văn Thành")
     r2.font.name = "Times New Roman"; r2.font.size = Pt(12); r2.font.bold = True
-    
+
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 3. MỤC LỤC (TRANG 3)
     # -------------------------------------------------------------------------
@@ -492,7 +540,7 @@ def build_concise_report():
         ("    2.2. Pipeline xử lý Thị giác máy tính (Computer Vision Pipeline)", "10"),
         ("        2.2.1. Căn chỉnh phối cảnh dựa trên 4 Marker định vị góc", "11"),
         ("        2.2.2. Phân vùng quan tâm (ROI) và trích xuất đặc trưng", "12"),
-        ("        2.2.3. Thuật toán nhận diện tô ô trắc nghiệm OMR Relative Scoring", "13"),
+        ("        2.2.3. Thuật toán nhận diện tô ô trắc nghiệm OMR Relative Ink Contrast", "13"),
         ("        2.2.4. Trích xuất Số báo danh, Mã đề thi và xử lý ngoại lệ", "14"),
         ("    2.3. Công nghệ và công cụ phát triển", "14"),
         ("CHƯƠNG 3: CÀI ĐẶT VÀ THỰC NGHIỆM ĐÁNH GIÁ", "15"),
@@ -503,50 +551,48 @@ def build_concise_report():
         ("    3.2. Giao diện Desktop CustomTkinter và quy trình 3 bước", "18"),
         ("    3.3. Thực nghiệm và đánh giá kết quả", "19"),
         ("        3.3.1. Kịch bản thử nghiệm trên 5 tập dữ liệu thử thách", "19"),
-        ("        3.3.2. Kết quả kiểm thử tự động Unit Tests (27/27 test cases)", "20"),
-        ("        3.3.3. Đánh giá hiệu năng thời gian và độ chính xác OMR", "21"),
-        ("        3.3.4. Trực quan hóa kết quả Overlay và xuất báo cáo Excel 3 Sheet", "22"),
+        ("        3.3.2. Trực quan hóa kết quả Overlay và xuất báo cáo Excel 3 Sheet", "22"),
         ("KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN", "23"),
         ("PHỤ LỤC 01: BẢNG ĐÁNH GIÁ THÀNH VIÊN VÀ PHÂN CÔNG NHIỆM VỤ", "24"),
         ("TÀI LIỆU THAM KHẢO", "25"),
     ]
     for item, page_str in toc_items:
         p_t = doc.add_paragraph()
-        p_t.paragraph_format.space_before = Pt(1); p_t.paragraph_format.space_after = Pt(1)
-        p_t.paragraph_format.line_spacing = 1.15; p_t.paragraph_format.first_line_indent = Inches(0)
+        p_t.paragraph_format.space_before = Pt(3); p_t.paragraph_format.space_after = Pt(3)
+        p_t.paragraph_format.line_spacing = 1.3; p_t.paragraph_format.first_line_indent = Inches(0)
         is_main = item.startswith("CHƯƠNG") or item in ["LỜI CẢM ƠN", "MỤC LỤC", "MỞ ĐẦU", "KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN", "TÀI LIỆU THAM KHẢO", "PHỤ LỤC 01: BẢNG ĐÁNH GIÁ THÀNH VIÊN VÀ PHÂN CÔNG NHIỆM VỤ"]
         r1 = p_t.add_run(item)
-        r1.font.name = "Times New Roman"; r1.font.size = Pt(11.5); r1.font.bold = is_main
+        r1.font.name = "Times New Roman"; r1.font.size = Pt(13); r1.font.bold = is_main
         if is_main: r1.font.color.rgb = RGBColor(0, 51, 102)
         dots = " " + "." * max(4, 76 - len(item) * 2) + " "
         rd = p_t.add_run(dots)
-        rd.font.name = "Times New Roman"; rd.font.size = Pt(9.5); rd.font.color.rgb = RGBColor(160, 160, 160)
+        rd.font.name = "Times New Roman"; rd.font.size = Pt(13); rd.font.color.rgb = RGBColor(160, 160, 160)
         r2 = p_t.add_run(page_str)
-        r2.font.name = "Times New Roman"; r2.font.size = Pt(11.5); r2.font.bold = is_main
-        
+        r2.font.name = "Times New Roman"; r2.font.size = Pt(13); r2.font.bold = is_main
+
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 4. MỞ ĐẦU (TRANG 4)
     # -------------------------------------------------------------------------
     add_h1(doc, "MỞ ĐẦU")
     add_p(doc, "Trong bối cảnh đổi mới căn bản và toàn diện giáo dục, hình thức thi trắc nghiệm khách quan đã trở thành phương pháp đánh giá chủ đạo trong Kỳ thi tốt nghiệp THPT và các kỳ thi tuyển sinh đại học tại Việt Nam. Việc chấm hàng ngàn bài thi trắc nghiệm sau mỗi đợt kiểm tra đặt ra áp lực rất lớn đối với giáo viên: phương pháp thủ công mất nhiều thời gian và dễ nhầm lẫn; trong khi máy chấm OMR phần cứng chuyên dụng có chi phí quá đắt đỏ (hàng chục đến hàng trăm triệu đồng), không phù hợp để trang bị rộng rãi.")
     add_p(doc, "Đề tài “Hệ thống nhận diện và chấm phiếu thi trắc nghiệm tự động bằng Python và OpenCV” ra đời nhằm giải quyết triệt để bài toán trên bằng cách ứng dụng công nghệ Thị giác máy tính (Computer Vision). Phần mềm tận dụng trực tiếp ảnh chụp từ camera điện thoại thông minh hoặc máy quét văn phòng thông thường để tự động căn chỉnh, đọc kết quả bài làm và chấm điểm tức thì với chi phí 0 đồng.")
-    add_p(doc, "Mục tiêu nghiên cứu chính của đề tài là xây dựng hoàn chỉnh ứng dụng Desktop hỗ trợ mẫu phiếu FormTHPT50 (dung lượng 1 đến 50 câu), đạt độ chính xác trên 98%, nắn phẳng tốt ảnh chụp nghiêng tới 30 độ, kháng bóng đổ và tẩy mờ, xử lý theo lô đa luồng mượt mà, xem kết quả trực quan dạng overlay và tự động xuất báo cáo Excel 3 Sheet chuyên nghiệp.")
+    add_p(doc, "Mục tiêu nghiên cứu là xây dựng ứng dụng Desktop hỗ trợ phiếu FormTHPT50, xử lý ảnh chụp, nhận diện ô tô và hỗ trợ chấm theo lô. Độ chính xác và khả năng xử lý ảnh nghiêng cần được đánh giá trên tập dữ liệu thực nghiệm.")
     add_p(doc, "Báo cáo đồ án gồm Mở đầu, 3 Chương nội dung chính (Chương 1: Tổng quan và mô tả bài toán; Chương 2: Phân tích và thiết kế thuật toán; Chương 3: Cài đặt và thực nghiệm đánh giá), Kết luận, Phụ lục và Tài liệu tham khảo.")
-    
+
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 5. CHƯƠNG 1: TỔNG QUAN VÀ MÔ TẢ BÀI TOÁN (TRANG 5 - 7)
     # -------------------------------------------------------------------------
     add_h1(doc, "CHƯƠNG 1: TỔNG QUAN VÀ MÔ TẢ BÀI TOÁN")
-    
+
     add_h2(doc, "1.1. Bối cảnh và tính cấp thiết của bài toán chấm thi trắc nghiệm")
     add_p(doc, "Tại các trường THPT và trung tâm khảo thí, giáo viên thường xuyên tổ chức các đợt kiểm tra 15 phút, 1 tiết, thi học kỳ và thi thử tốt nghiệp. Số lượng phiếu trả lời cần chấm sau mỗi kỳ thi lên tới hàng trăm, hàng ngàn bài. Việc chấm thủ công bằng dưỡng đục lỗ bộc lộ nhiều hạn chế: tốn hàng chục giờ đồng hồ, gây mỏi mắt, dễ cộng sai điểm và chậm trễ trong khâu tổng hợp báo cáo.")
     add_p(doc, "Việc áp dụng công nghệ Thị giác máy tính để tự động hóa quy trình chấm thi đem lại các lợi ích vượt trội:")
-    add_bullet(doc, "Một bài thi 50 câu được nắn phẳng và chấm xong chỉ trong 0.15 - 0.35 giây, nhanh gấp hàng trăm lần chấm thủ công.", bold_prefix="Tiết kiệm tối đa thời gian:")
-    add_bullet(doc, "Thuật toán xử lý ma trận điểm ảnh tuyệt đối công bằng, loại bỏ hoàn toàn các sai sót chủ quan của con người.", bold_prefix="Độ chính xác và khách quan:")
+    add_bullet(doc, "H\u1ec7 th\u1ed1ng h\u1ed7 tr\u1ee3 x\u1eed l\u00fd nhi\u1ec1u phi\u1ebfu theo l\u00f4; th\u1eddi gian th\u1ef1c t\u1ebf ph\u1ee5 thu\u1ed9c c\u1ea5u h\u00ecnh m\u00e1y v\u00e0 ch\u1ea5t l\u01b0\u1ee3ng \u1ea3nh.", bold_prefix="Ti\u1ebft ki\u1ec7m th\u1eddi gian:")
+    add_bullet(doc, "K\u1ebft qu\u1ea3 nh\u1ea5t qu\u00e1n; c\u00e1c tr\u01b0\u1eddng h\u1ee3p kh\u00f4ng r\u00f5 s\u1ebd chuy\u1ec3n ra ki\u1ec3m tra l\u1ea1i.", bold_prefix="Ch\u1ea5m nh\u1ea5t qu\u00e1n:")
     add_bullet(doc, "Không yêu cầu máy quét OMR đắt tiền; tận dụng trực tiếp camera điện thoại thông minh sẵn có của giáo viên.", bold_prefix="Tối ưu chi phí đầu tư:")
     add_bullet(doc, "Tự động phân tích phổ điểm, tính điểm trung bình, xếp loại và xuất file Excel 3 Sheet phục vụ quản lý chuyên môn.", bold_prefix="Tự động hóa thống kê:")
 
@@ -572,12 +618,12 @@ def build_concise_report():
                      "Hình 1.1. Mẫu phiếu thi trắc nghiệm FormTHPT50 tiêu chuẩn khổ A4", width_in=3.6)
 
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 6. CHƯƠNG 2: PHÂN TÍCH VÀ THIẾT KẾ THUẬT TOÁN (TRANG 8 - 14)
     # -------------------------------------------------------------------------
     add_h1(doc, "CHƯƠNG 2: PHÂN TÍCH VÀ THIẾT KẾ THUẬT TOÁN")
-    
+
     add_h2(doc, "2.1. Yêu cầu bài toán và kiến trúc hệ thống")
     add_h3(doc, "2.1.1. Yêu cầu bài toán (Input / Output)")
     io_data = [
@@ -597,14 +643,14 @@ def build_concise_report():
     add_bullet(doc, "Đọc ảnh an toàn tiếng Việt UTF-8; Gaussian Blur, phân ngưỡng thích nghi Otsu/Adaptive Threshold; tìm 4 marker vuông góc và warp phối cảnh về canvas 1653 x 2337 px; tự động xoay đúng chiều nếu ảnh bị lộn ngược.", bold_prefix="Chức năng 2 - Tiền xử lý & Căn chỉnh phối cảnh:")
     add_bullet(doc, "Kiểm tra độ khớp lưới bọt và 25 marker phụ theo file vector PDF layout thpt50.json; đo độ tương phản mực nội vùng (Relative Ink Contrast) ở tâm từng ô; nhận diện chính xác câu đúng, bỏ trống, tô trùng và cảnh báo tô mờ/tẩy lem; quét SBD 6 số và Mã đề 3 số.", bold_prefix="Chức năng 3 - Nhận diện đáp án OMR (1-50 câu):")
     add_bullet(doc, "Xử lý hàng loạt ảnh trên luồng nền (threading.Thread) không đơ giao diện; thanh tiến trình ProgressBar thời gian thực; cơ chế chống dừng đột ngột (Fault Tolerance): nếu 1 ảnh bị lỗi rách góc thì ghi nhận lỗi và tự động chấm tiếp các bài còn lại.", bold_prefix="Chức năng 4 - Xử lý theo lô đa luồng an toàn:")
-    add_bullet(doc, "Tự động so khớp đáp án theo thang điểm 10.0 (+10/N điểm/câu); phân loại học lực (Xuất sắc, Giỏi, Khá, TB, Yếu); hỗ trợ tự dò đáp án từ ảnh giáo viên; xuất báo cáo Excel 3 Sheet chuyên nghiệp.", bold_prefix="Chức năng 5 - Chấm điểm tự động & Xuất Excel 3 Sheet:")
+    add_bullet(doc, "Tự động so khớp đáp án theo thang điểm 10.0 (+10/N điểm/câu); phân loại học lực (Giỏi, Khá, Trung bình, Yếu); hỗ trợ tự dò đáp án từ ảnh giáo viên; xuất báo cáo Excel 3 Sheet chuyên nghiệp.", bold_prefix="Chức năng 5 - Chấm điểm tự động & Xuất Excel 3 Sheet:")
 
     add_image_figure(doc, str(ROOT / "demo_output" / "figures" / "hinh_2_1_kien_truc_he_thong.png"),
                      "Hình 2.1. Sơ đồ kiến trúc tổng thể 4 tầng của hệ thống chấm phiếu FormTHPT50", width_in=5.4)
 
     add_h3(doc, "2.1.3. Yêu cầu phi chức năng")
     add_bullet(doc, "Thời gian xử lý trọn gói 1 bài thi dưới 0.5 giây trên máy tính thông thường.", bold_prefix="Hiệu năng:")
-    add_bullet(doc, "Nhận diện chính xác trên 98% đối với bài thi tô chì đúng quy cách, kháng chịu tốt góc chụp nghiêng tới 30 độ.", bold_prefix="Độ chính xác:")
+    add_bullet(doc, "Đánh giá độ chính xác nhận diện với phiếu tô đúng quy cách và các mức độ nghiêng khác nhau trên tập ảnh thực nghiệm.", bold_prefix="Độ chính xác:")
     add_bullet(doc, "Mọi tác vụ nặng chạy trên Background Worker Thread, cập nhật UI an toàn qua callback self.after.", bold_prefix="An toàn đa luồng:")
     add_bullet(doc, "Toàn bộ đường dẫn tương đối theo PROJECT_ROOT, hỗ trợ tiếng Việt có dấu qua imread_utf8.", bold_prefix="Độc lập nền tảng:")
 
@@ -630,7 +676,7 @@ def build_concise_report():
     add_image_figure(doc, str(ROOT / "templates" / "layouts" / "thpt50_debug.png"),
                      "Hình 2.3. Bố cục ma trận pixel và các marker định vị của FormTHPT50 (Canvas 1653 x 2337 px)", width_in=3.6)
 
-    add_h3(doc, "2.2.3. Thuật toán nhận diện tô ô trắc nghiệm OMR Relative Scoring")
+    add_h3(doc, "2.2.3. Thuật toán nhận diện tô ô trắc nghiệm OMR Relative Ink Contrast")
     add_p(doc, "Thay vì đếm pixel đen theo ngưỡng nhị phân cố định (dễ bị tê liệt khi có bóng đổ hoặc phòng thiếu sáng), đề tài áp dụng thuật toán Độ tương phản mực nội vùng (Relative Ink Contrast):")
 
     add_image_figure(doc, str(ROOT / "demo_output" / "figures" / "hinh_2_4_nguyen_ly_omr.png"),
@@ -654,31 +700,29 @@ def build_concise_report():
     add_bullet(doc, "OpenCV (opencv-python): Cung cấp các hàm xử lý ảnh số, biến đổi phối cảnh và contour tốc độ cao.", bold_prefix="• Thị giác máy tính:")
     add_bullet(doc, "CustomTkinter: Giao diện Desktop hiện đại, hỗ trợ Dark/Light mode, widget bo góc mượt mà.", bold_prefix="• Giao diện đồ họa:")
     add_bullet(doc, "OpenPyXL: Đọc/ghi và định dạng bảng tính Excel 3 Sheet chuyên nghiệp.", bold_prefix="• Xuất báo cáo:")
-    add_bullet(doc, "Pytest: Khung kiểm thử tự động đảm bảo độ ổn định của hệ thống.", bold_prefix="• Kiểm thử:")
 
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 7. CHƯƠNG 3: CÀI ĐẶT VÀ THỰC NGHIỆM ĐÁNH GIÁ (TRANG 15 - 22)
     # -------------------------------------------------------------------------
     add_h1(doc, "CHƯƠNG 3: CÀI ĐẶT VÀ THỰC NGHIỆM ĐÁNH GIÁ")
-    
+
     add_h2(doc, "3.1. Cài đặt hệ thống và tổ chức mã nguồn")
     add_h3(doc, "3.1.1. Cấu trúc mã nguồn dự án")
     add_p(doc, "Mã nguồn được tổ chức module hóa cao theo cấu trúc:")
-    
+
     code_summary = (
         "Do An/\n"
         "|-- core/           # Thuật toán lõi: image_alignment, omr_extractor, grading_engine,\n"
         "|                   # visualizer, excel_exporter, exam_processor, sheet_generator, cv_utils\n"
         "|-- gui/            # Giao diện người dùng Desktop: app.py (CustomTkinter)\n"
         "|-- templates/      # Layout JSON thpt50.json, phiếu thi trắng, phiếu đáp án mẫu GV\n"
-        "|-- tests/          # Bộ kiểm thử tự động: test_omr_50_cau.py (27 unit tests)\n"
         "|-- tools/          # Công cụ trích xuất layout pixel từ PDF: build_layout_from_pdf.py\n"
         "|-- main.py         # Điểm khởi chạy chính của chương trình"
     )
     add_code_block(doc, code_summary)
-    
+
     mod_data = [
         ["image_alignment.py", "Chức năng 2", "Tiền xử lý, phát hiện 4 marker góc, warp phối cảnh 1653x2337 px và tự đảo chiều xoay."],
         ["omr_extractor.py", "Chức năng 3", "Đo Relative Ink Contrast, xác thực lưới bọt, bóc tách SBD, Mã đề và 50 câu."],
@@ -752,45 +796,8 @@ def build_concise_report():
     add_image_figure(doc, str(ROOT / "demo_output" / "test_tgmt_aligned.png"),
                      "Hình 3.3. Ảnh bài thi sau khi nắn phẳng phối cảnh bằng 4 Marker định vị góc", width_in=3.4)
 
-    add_h3(doc, "3.3.2. Kết quả kiểm thử tự động Unit Tests (27/27 test cases)")
-    add_p(doc, "Toàn bộ 27 test cases trong file tests/test_omr_50_cau.py đều đạt trạng thái PASSED 100% trong 7.55 giây. Bảng 3.3 tổng hợp các ca kiểm thử chính:")
 
-    t_data = [
-        ["1", "Kiểm tra kích thước canvas & bố cục JSON thpt50", "Đảm bảo canvas 1653x2337 px, 2 khối 25 câu.", "PASSED"],
-        ["2", "Đọc toàn diện bài thi phẳng (SBD, Mã đề, 50 câu)", "Độ chính xác 100%, block confidence >= 0.98.", "PASSED"],
-        ["3", "Kiểm thử số câu tùy biến (10, 20, 30, 40, 50 câu)", "Bóc tách chính xác N câu đầu theo yêu cầu.", "PASSED"],
-        ["4", "Nắn phối cảnh ảnh chụp điện thoại độ phân giải thấp", "Phục hồi thành công về canvas chuẩn 1653x2337.", "PASSED"],
-        ["5", "Khôi phục ảnh bị xoay (90, 180, 270 độ)", "Tự động đảo chiều về đúng chiều chuẩn của phiếu.", "PASSED"],
-        ["6", "Ảnh thiếu sáng kết hợp bóng đổ elip che khuất", "Độ chính xác nhận diện OMR vẫn đạt >= 98.0%.", "PASSED"],
-        ["7", "Xử lý câu tô trùng nhiều đáp án (Multiple Marks)", "Ghi nhận đúng ['A', 'B'] và bật cờ needs_review.", "PASSED"],
-        ["8", "Từ chối ảnh không đúng mẫu mà không đoán mò", "Từ chối chấm ảnh sai mẫu, layout_source='unrecognized'.", "PASSED"]
-    ]
-    add_table_data(doc, ["STT", "Mục tiêu kiểm thử", "Kết quả thực nghiệm", "Trạng thái"], t_data, [0.6, 2.7, 2.3, 0.7],
-                   caption="Bảng 3.3. Bảng tổng hợp kết quả các ca kiểm thử tự động chính")
-
-    add_h3(doc, "3.3.3. Đánh giá hiệu năng thời gian và độ chính xác OMR")
-    time_data = [
-        ["1. Tiền xử lý & Nắn phối cảnh", "0.082 s", "37.3%", "Gaussian Blur, phát hiện 4 marker, warpPerspective."],
-        ["2. Xác thực lưới & Bóc tách OMR", "0.088 s", "40.0%", "Đo Relative Contrast cho 200 ô câu hỏi, SBD và mã đề."],
-        ["3. Chấm điểm & Xếp loại", "0.005 s", "2.3%", "So khớp mảng đáp án, tính điểm thang 10.0."],
-        ["4. Vẽ Overlay kết quả", "0.045 s", "20.4%", "Vẽ vòng tròn màu xanh/đỏ/vàng, đóng dấu banner điểm."],
-        ["TỔNG THỜI GIAN TRUNG BÌNH", "0.220 s", "100.0%", "Xử lý trọn gói 1 bài thi 50 câu chỉ trong ~0.22 giây!"]
-    ]
-    add_table_data(doc, ["Công đoạn xử lý", "Thời gian", "Tỷ lệ", "Nội dung kỹ thuật"], time_data, [2.2, 1.0, 1.0, 2.1],
-                   caption="Bảng 3.4. Bảng đo thời gian thực thi (latency) chi tiết từng công đoạn trong pipeline")
-
-    acc_data = [
-        ["Tập 1: Ảnh scan phẳng chuẩn", "100 bài", "98.5%", "99.8%", "+1.3%"],
-        ["Tập 2: Ảnh chụp nghiêng góc 15-30 độ", "100 bài", "91.2%", "98.9%", "+7.7%"],
-        ["Tập 3: Ảnh xoay các hướng (90, 180, 270)", "50 bài", "0.0% (Lỗi chiều)", "99.2%", "+99.2%"],
-        ["Tập 4: Ảnh thiếu sáng & bóng đổ gắt", "100 bài", "74.6% (Đơ ngưỡng)", "98.4%", "+23.8%"],
-        ["Tập 5: Ảnh tẩy lem & tô mờ sát ngưỡng", "100 bài", "82.1% (Nhầm ô tẩy)", "98.1% (Cảnh báo)", "+16.0%"],
-        ["TRUNG BÌNH TOÀN BỘ CÁC TẬP", "450 bài", "69.3%", "99.1%", "+29.8%"]
-    ]
-    add_table_data(doc, ["Tập dữ liệu thử nghiệm", "Số lượng", "Ngưỡng cố định", "Relative Contrast", "Cải thiện"], acc_data, [2.1, 0.9, 1.1, 1.4, 0.8],
-                   caption="Bảng 3.5. Bảng đánh giá độ chính xác nhận diện OMR trên các điều kiện thực nghiệm")
-
-    add_h3(doc, "3.3.4. Trực quan hóa kết quả Overlay và xuất báo cáo Excel 3 Sheet")
+    add_h3(doc, "3.3.2. Trực quan hóa kết quả Overlay và xuất báo cáo Excel 3 Sheet")
     add_p(doc, "Sau khi chấm, hệ thống hiển thị trực quan lớp phủ đồ họa lên bài làm (Hình 3.4): vòng tròn Xanh lá (câu đúng), vòng tròn Đỏ kèm gạch chéo (câu sai/tô trùng), vòng tròn Vàng (đáp án chuẩn của đề) và Banner điểm số nổi bật ở đầu trang.")
     add_p(doc, "Báo cáo Excel xuất ra gồm 3 Sheet chuyên nghiệp (Hình 3.5): Sheet 1 (Bang_Diem_Tong_Hop: điểm, xếp loại, trạng thái); Sheet 2 (Chi_Tiet_Bai_Lam: ma trận câu trả lời tô xanh/đỏ theo conditional formatting); Sheet 3 (Thong_Ke_Pho_Diem: điểm TB, cao/thấp nhất, phổ điểm 10 khoảng, tỷ lệ làm đúng từng câu hỏi).")
 
@@ -801,17 +808,16 @@ def build_concise_report():
                      "Hình 3.5. Cấu trúc báo cáo kết quả thi file Excel gồm 3 Sheet chuyên nghiệp", width_in=5.4)
 
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 8. KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN (TRANG 23)
     # -------------------------------------------------------------------------
     add_h1(doc, "KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN")
-    
+
     add_h2(doc, "1. Kết quả đạt được")
     add_bullet(doc, "Hoàn thành trọn vẹn 5 chức năng đề bài đặt ra: Quản lý ảnh, Tiền xử lý & căn chỉnh, Nhận diện OMR, Xử lý theo lô đa luồng mượt mà, Chấm điểm & xuất Excel 3 Sheet.", bold_prefix="1. Đáp ứng toàn diện chức năng:")
     add_bullet(doc, "Giải quyết triệt để biến dạng phối cảnh khi chụp điện thoại bằng 4 Marker góc và tự động nhận diện đảo chiều xoay ảnh.", bold_prefix="2. Làm chủ thuật toán hình học:")
     add_bullet(doc, "Đột phá với thuật toán Relative Ink Contrast, kháng chịu xuất sắc hiện tượng bóng đổ, phòng thiếu sáng và tẩy lem mờ.", bold_prefix="3. Thuật toán OMR kháng nhiễu:")
-    add_bullet(doc, "Tốc độ xử lý ~0.22 giây/bài; độ chính xác nhận diện OMR đạt 99.1%; 27/27 unit tests đạt 100% Passed.", bold_prefix="4. Hiệu năng & Độ tin cậy cao:")
     add_bullet(doc, "Giao diện Desktop CustomTkinter mượt mà, trực quan, hỗ trợ xem ảnh overlay và báo cáo Excel 3 Sheet chuẩn mực.", bold_prefix="5. Sản phẩm ứng dụng hoàn chỉnh:")
 
     add_h2(doc, "2. Những tồn tại và hạn chế")
@@ -825,7 +831,7 @@ def build_concise_report():
     add_bullet(doc, "Đồng bộ hóa cơ sở dữ liệu đám mây trực tiếp vào phần mềm quản lý học tập (vnEdu, SMAS) của nhà trường.", bold_prefix="3. Tích hợp Cloud LMS:")
 
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 9. PHỤ LỤC 01: BẢNG ĐÁNH GIÁ THÀNH VIÊN (TRANG 24)
     # -------------------------------------------------------------------------
@@ -833,22 +839,22 @@ def build_concise_report():
     add_p(doc, "Bảng tổng hợp phân công nhiệm vụ và tự đánh giá đóng góp của 4 thành viên theo thực tế triển khai dự án:")
 
     team_data = [
-        ["1", "Hồ Tuấn Hiệp\nMSSV: 225748020110020", "Trưởng nhóm\n(CV 1 & Architecture)", 
+        ["1", "Hồ Tuấn Hiệp\nMSSV: 225748020110020", "Trưởng nhóm\n(CV 1 & Architecture)",
          "• Thiết kế mẫu FormTHPT50 & ma trận pixel 1653x2337.\n• Lập trình căn chỉnh 4 Marker (image_alignment.py).\n• Tự động đảo chiều xoay ảnh (reorient_aligned_sheet).\n• Điều phối chung và biên soạn báo cáo đồ án.", "100%", "9.0", "Hồ Tuấn Hiệp"],
-        ["2", "Nguyễn Khắc Quốc Khánh\nMSSV: 225748020110261", "Thành viên\n(CV 2 & OMR Engine)", 
+        ["2", "Nguyễn Khắc Quốc Khánh\nMSSV: 225748020110261", "Thành viên\n(CV 2 & OMR Engine)",
          "• Thuật toán đo tương phản Relative Ink Contrast (omr_extractor.py).\n• Bóc tách OMR SBD (6 số), Mã đề (3 số), 50 câu.\n• Xử lý kháng bóng đổ, ánh sáng yếu và tẩy lem mờ.\n• Lập trình module vẽ kết quả overlay (visualizer.py).", "100%", "9.0", "Nguyễn Khắc Quốc Khánh"],
-        ["3", "Lê Viết Quân\nMSSV: 225748020110203", "Thành viên\n(Backend & Data)", 
+        ["3", "Lê Viết Quân\nMSSV: 225748020110203", "Thành viên\n(Backend & Data)",
          "• Cài đặt logic chấm điểm thang 10.0 (grading_engine.py).\n• Lập trình xuất báo cáo Excel 3 Sheet (excel_exporter.py).\n• Định dạng màu có điều kiện (Conditional Formatting).\n• Quản lý lưu trữ đường dẫn tương đối PROJECT_ROOT.", "100%", "8.5", "Lê Viết Quân"],
-        ["4", "Nguyễn Văn Thành\nMSSV: 215748020110105", "Thành viên\n(Frontend & Testing)", 
-         "• Thiết kế giao diện Desktop CustomTkinter 3 bước (app.py).\n• Xử lý Batch Processing đa luồng Thread-safe mượt mà.\n• Tích hợp chụp màn hình và dán ảnh clipboard Ctrl+V.\n• Xây dựng và chạy 27 unit tests (Pytest 100% Passed).", "100%", "8.5", "Nguyễn Văn Thành"]
+        ["4", "Nguyễn Văn Thành\nMSSV: 215748020110105", "Thành viên\n(Frontend & Integration)",
+         "- Desktop GUI CustomTkinter (app.py).\n- Thread-safe batch processing.\n- Clipboard and screenshot input.\n- Integrated app entry point (main.py).", "100%", "8.5", "Nguy\u1ec5n V\u0103n Th\u00e0nh"]
     ]
-    add_table_data(doc, ["STT", "Họ và tên & MSSV", "Vai trò phụ trách", "Nhiệm vụ kỹ thuật hoàn thành", "Đóng góp", "Điểm", "Chữ ký"], 
+    add_table_data(doc, ["STT", "Họ và tên & MSSV", "Vai trò phụ trách", "Nhiệm vụ kỹ thuật hoàn thành", "Đóng góp", "Điểm", "Chữ ký"],
                    team_data, [0.5, 1.3, 1.1, 2.5, 0.7, 0.6, 0.8],
                    caption="Bảng 4.1. Bảng phân công nhiệm vụ và tự đánh giá đóng góp của 4 thành viên")
     add_p(doc, "Tất cả 4 thành viên đều tích cực, chủ động và hoàn thành 100% khối lượng công việc được giao đúng tiến độ.", bold_prefix="Đánh giá chung: ")
 
     doc.add_page_break()
-    
+
     # -------------------------------------------------------------------------
     # 10. TÀI LIỆU THAM KHẢO (TRANG 25)
     # -------------------------------------------------------------------------
@@ -858,25 +864,25 @@ def build_concise_report():
         "[2] Gary Bradski, Adrian Kaehler (2008), Learning OpenCV: Computer Vision with the OpenCV Library, O'Reilly Media.",
         "[3] Bradski, G. (2000), 'The OpenCV Library', Dr. Dobb's Journal of Software Tools, Vol. 25, No. 11, pp. 120-125.",
         "[4] Otsu, N. (1979), 'A threshold selection method from gray-level histograms', IEEE Transactions on Systems, Man, and Cybernetics, Vol. 9, No. 1, pp. 62-66.",
-        "[5] Carsten Rother, Vladimir Kolmogorov, Andrew Blake (2004), 'GrabCut: Interactive Foreground Extraction using Iterated Graph Cuts', ACM SIGGRAPH.",
-        "[6] Tom Schimansky (2023), CustomTkinter Documentation and UI Framework for Python, GitHub.",
-        "[7] Eric Gazoni, Charlie Clark (2023), openpyxl - A Python library to read/write Excel 2010 xlsx/xlsm files.",
-        "[8] Bộ Giáo dục và Đào tạo (2024), Quy chế thi tốt nghiệp Trung học phổ thông và quy định cấu trúc đề thi trắc nghiệm chuẩn quốc gia.",
-        "[9] Nguyễn Thị Minh Tâm (2024), Bài giảng học phần Thị giác máy tính, Viện Kỹ thuật và Công nghệ - Trường Đại học Vinh.",
-        "[10] Ian Sommerville (2011), Software Engineering, 9th Edition, Addison-Wesley."
+        "[5] Tom Schimansky (2023), CustomTkinter Documentation and UI Framework for Python, GitHub.",
+        "[6] Eric Gazoni, Charlie Clark (2023), openpyxl - A Python library to read/write Excel 2010 xlsx/xlsm files.",
+        "[7] Bộ Giáo dục và Đào tạo (2024), Quy chế thi tốt nghiệp Trung học phổ thông và quy định cấu trúc đề thi trắc nghiệm chuẩn quốc gia.",
+        "[8] Nguyễn Thị Minh Tâm (2024), Bài giảng học phần Thị giác máy tính, Viện Kỹ thuật và Công nghệ - Trường Đại học Vinh.",
+        "[9] Ian Sommerville (2011), Software Engineering, 9th Edition, Addison-Wesley."
     ]
     for r_text in refs:
         p_r = doc.add_paragraph()
-        p_r.paragraph_format.space_before = Pt(2); p_r.paragraph_format.space_after = Pt(2)
-        p_r.paragraph_format.line_spacing = 1.25; p_r.paragraph_format.left_indent = Inches(0.4)
+        p_r.paragraph_format.space_before = Pt(3); p_r.paragraph_format.space_after = Pt(3)
+        p_r.paragraph_format.line_spacing = 1.3; p_r.paragraph_format.left_indent = Inches(0.4)
         p_r.paragraph_format.first_line_indent = Inches(-0.4)
         r = p_r.add_run(r_text)
-        r.font.name = "Times New Roman"; r.font.size = Pt(11.5)
+        r.font.name = "Times New Roman"; r.font.size = Pt(13)
 
+    normalize_academic_body(doc)
     out_path = ROOT / "Bao_Cao_Do_An_TGMT_ChamTracNgiem.docx"
     doc.save(str(out_path))
     print(f"Concise report generated: {out_path}")
-    
+
     copy_path = ROOT / "TGMT_Hoan_Thien.docx"
     doc.save(str(copy_path))
     print(f"Copy generated: {copy_path}")
