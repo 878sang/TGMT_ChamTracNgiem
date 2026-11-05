@@ -163,7 +163,7 @@ def find_fiducial_markers(gray_img: np.ndarray) -> Optional[np.ndarray]:
     """
     h_img, w_img = gray_img.shape[:2]
     resolution_scale = min(1.0, min(w_img, h_img) / 1024.0)
-    min_marker_area = max(25, int(round(250 * resolution_scale**2)))
+    min_marker_area = max(100, int(round(50 * resolution_scale**2)))
     max_marker_area = max(
         min_marker_area + 1,
         int(round(15000 * resolution_scale**2)),
@@ -259,6 +259,30 @@ def find_paper_contour(gray_img: np.ndarray) -> Optional[np.ndarray]:
             pts = approx.reshape(4, 2).astype(np.float32)
             return order_points(pts)
 
+    # Woven or textured backgrounds often break the paper edge into many
+    # short Canny segments. Segment the bright sheet and close those gaps
+    # before looking for its outer boundary.
+    _, bright = cv2.threshold(
+        blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+    close_size = max(21, int(round(min(h, w) * 0.025)) | 1)
+    close_kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (close_size, close_size)
+    )
+    bright = cv2.morphologyEx(bright, cv2.MORPH_CLOSE, close_kernel, iterations=2)
+    contours, _ = cv2.findContours(
+        bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:5]:
+        hull = cv2.convexHull(cnt)
+        area = cv2.contourArea(hull)
+        if area < min_area or area > h * w * 0.98:
+            continue
+        perimeter = cv2.arcLength(hull, True)
+        approx = cv2.approxPolyDP(hull, 0.025 * perimeter, True)
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            return order_points(approx.reshape(4, 2).astype(np.float32))
+
     return None
 
 
@@ -336,6 +360,112 @@ def _layout_orientation_score(gray_img: np.ndarray) -> float:
     return matches / total if total else 0.0
 
 
+def _template_feature_alignment(img: np.ndarray) -> Optional[np.ndarray]:
+    """Register a difficult phone photo to the printed form using SIFT features."""
+    template_path = os.path.join(
+        PROJECT_ROOT, "templates", "layouts", "thpt50_base.png"
+    )
+    template = imread_utf8(template_path)
+    if template is not None and template.ndim == 3:
+        template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+    if template is None or not hasattr(cv2, "SIFT_create"):
+        return None
+    sift = cv2.SIFT_create(nfeatures=16000, contrastThreshold=0.01, edgeThreshold=8)
+    template_keypoints, template_descriptors = sift.detectAndCompute(template, None)
+    if template_descriptors is None:
+        return None
+    matcher = cv2.BFMatcher(cv2.NORM_L2)
+    best_warp = None
+    best_score = 0.0
+    rotations = (
+        (img, None),
+        (cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE), cv2.ROTATE_90_CLOCKWISE),
+        (cv2.rotate(img, cv2.ROTATE_180), cv2.ROTATE_180),
+        (cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE), cv2.ROTATE_90_COUNTERCLOCKWISE),
+    )
+    for rotated, _ in rotations:
+        gray = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY) if rotated.ndim == 3 else rotated
+        source_keypoints, source_descriptors = sift.detectAndCompute(gray, None)
+        if source_descriptors is None:
+            continue
+        pairs = matcher.knnMatch(source_descriptors, template_descriptors, k=2)
+        good = [first for first, second in pairs if first.distance < 0.78 * second.distance]
+        if len(good) < 20:
+            continue
+        source_points = np.float32([source_keypoints[m.queryIdx].pt for m in good])
+        target_points = np.float32([template_keypoints[m.trainIdx].pt for m in good])
+        matrix, inliers = cv2.findHomography(source_points, target_points, cv2.RANSAC, 5.0)
+        inlier_count = int(inliers.sum()) if inliers is not None else 0
+        if matrix is None or inlier_count < 20 or inlier_count / len(good) < 0.18:
+            continue
+        h, w = gray.shape[:2]
+        projected = cv2.perspectiveTransform(
+            np.float32([[[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]]]),
+            matrix,
+        )[0]
+        if not cv2.isContourConvex(projected.astype(np.int32)):
+            continue
+        candidate = cv2.warpPerspective(
+            rotated, matrix, (STANDARD_WIDTH, STANDARD_HEIGHT)
+        )
+        candidate_gray = (
+            cv2.cvtColor(candidate, cv2.COLOR_BGR2GRAY)
+            if candidate.ndim == 3 else candidate
+        )
+        score = _layout_orientation_score(candidate_gray)
+        if score > best_score:
+            best_score, best_warp = score, candidate
+    return best_warp
+
+
+def _choose_alignment(img: np.ndarray, aligned: np.ndarray) -> Tuple[np.ndarray, bool]:
+    """Use feature registration only when it clearly improves a weak page warp."""
+    current_gray = (
+        cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY)
+        if aligned.ndim == 3 else aligned
+    )
+    current_score = _layout_orientation_score(current_gray)
+    if current_score >= 0.10:
+        return aligned, False
+    candidate = _template_feature_alignment(img)
+    if candidate is None:
+        return aligned, False
+    candidate_gray = (
+        cv2.cvtColor(candidate, cv2.COLOR_BGR2GRAY)
+        if candidate.ndim == 3 else candidate
+    )
+    candidate_score = _layout_orientation_score(candidate_gray)
+    candidate_marker_score = _template_marker_score(candidate_gray)
+    is_strong_candidate = (
+        candidate_score >= 0.50
+        or (candidate_score >= 0.35 and candidate_marker_score >= 0.80)
+    )
+    if is_strong_candidate and candidate_score >= current_score + 0.20:
+        return candidate, True
+    return aligned, False
+
+
+def _template_marker_score(gray_img: np.ndarray) -> float:
+    """Measure how many expected registration squares align with the template."""
+    h, w = gray_img.shape[:2]
+    matched = 0
+    total = 0
+    for marker in ACTIVE_LAYOUT["markers"]:
+        cx, cy = int(round(marker["x"])), int(round(marker["y"]))
+        radius = max(3, int(round(marker["size"] * 0.30)))
+        outer = max(radius + 2, int(round(marker["size"] * 0.60)))
+        if cx - outer < 0 or cy - outer < 0 or cx + outer >= w or cy + outer >= h:
+            continue
+        roi = gray_img[cy-outer:cy+outer+1, cx-outer:cx+outer+1]
+        yy, xx = np.ogrid[-outer:outer+1, -outer:outer+1]
+        d2 = xx*xx + yy*yy
+        center = roi[d2 <= radius*radius]
+        paper = roi[(d2 >= (radius+2)**2) & (d2 <= outer*outer)]
+        matched += float(np.mean(center) < 180 and np.mean(paper)-np.mean(center) >= 8)
+        total += 1
+    return matched / total if total else 0.0
+
+
 def _warp_portrait(
     img: np.ndarray,
     ordered_pts: np.ndarray,
@@ -387,6 +517,9 @@ def align_paper(image_input) -> Tuple[bool, Optional[np.ndarray], str]:
     marker_pts = find_fiducial_markers(gray)
     if marker_pts is not None and len(marker_pts) == 4:
         aligned, is_landscape, was_reversed = _warp_portrait(img, marker_pts, use_markers=True)
+        aligned, template_refined = _choose_alignment(img, aligned)
+        if template_refined:
+            return True, aligned, "Căn chỉnh thành công bằng đối chiếu đặc trưng FormTHPT50."
         if was_reversed and is_landscape:
             return True, aligned, "Căn chỉnh thành công bằng 4 Marker; đã tự xoay ảnh chụp ngang."
         if was_reversed:
@@ -399,6 +532,9 @@ def align_paper(image_input) -> Tuple[bool, Optional[np.ndarray], str]:
     paper_pts = find_paper_contour(gray)
     if paper_pts is not None and len(paper_pts) == 4:
         aligned, is_landscape, was_reversed = _warp_portrait(img, paper_pts, use_markers=False)
+        aligned, template_refined = _choose_alignment(img, aligned)
+        if template_refined:
+            return True, aligned, "Căn chỉnh thành công bằng đối chiếu đặc trưng FormTHPT50."
         if was_reversed and is_landscape:
             return True, aligned, "Căn chỉnh thành công bằng viền phiếu; đã tự xoay ảnh chụp ngang."
         if was_reversed:
@@ -406,5 +542,20 @@ def align_paper(image_input) -> Tuple[bool, Optional[np.ndarray], str]:
         if is_landscape:
             return True, aligned, "Căn chỉnh thành công bằng viền phiếu; đã tự xoay ảnh chụp ngang."
         return True, aligned, "Căn chỉnh thành công bằng đường viền phiếu."
+
+    template_aligned = _template_feature_alignment(img)
+    if template_aligned is not None:
+        template_gray = (
+            cv2.cvtColor(template_aligned, cv2.COLOR_BGR2GRAY)
+            if template_aligned.ndim == 3 else template_aligned
+        )
+        if (
+            _layout_orientation_score(template_gray) >= 0.50
+            or (
+                _layout_orientation_score(template_gray) >= 0.35
+                and _template_marker_score(template_gray) >= 0.80
+            )
+        ):
+            return True, template_aligned, "Căn chỉnh thành công bằng đối chiếu đặc trưng FormTHPT50."
 
     return False, None, "Không tìm thấy 4 marker định vị hoặc viền phiếu hợp lệ. Vui lòng chụp rõ toàn bộ 4 góc phiếu!"

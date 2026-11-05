@@ -16,6 +16,7 @@ from core.layouts import load_layout
 ACTIVE_LAYOUT = load_layout()
 OPTIONS = ("A", "B", "C", "D")
 MARKED_BUBBLE_CONTRAST = 12.0
+BUBBLE_FILL_CONTRAST = 24.0
 ID_MARKED_BUBBLE_CONTRAST = 24.0
 ID_AMBIGUITY_MARGIN = 12.0
 
@@ -148,6 +149,7 @@ def _read_digit_block(
 ) -> Tuple[str, bool, float]:
     digits: List[str] = []
     confidences: List[float] = []
+    clear_mark_count = 0
     is_valid = True
     for column in block["columns_data"]:
         contrasts = [
@@ -158,7 +160,7 @@ def _read_digit_block(
                     int(round(bubble["y"])) + dy,
                     radius=int(round(block["radius"])),
                 )
-                for dx in range(-4, 5, 2)
+                for dx in range(-6, 7, 2)
                 for dy in range(-8, 9, 2)
             )
             for bubble in column["digits"]
@@ -169,14 +171,24 @@ def _read_digit_block(
         # Pencil marks are often lighter than answer marks. Compare against
         # the local paper and accept a modest contrast while keeping close
         # competitors ambiguous instead of guessing a digit.
-        if ordered[0] < ID_MARKED_BUBBLE_CONTRAST:
-            digits.append("?")
-            is_valid = False
-        elif ordered[1] >= ID_MARKED_BUBBLE_CONTRAST and ordered[0] - ordered[1] < ID_AMBIGUITY_MARGIN:
+        has_clear_mark = (
+            ordered[0] >= ID_MARKED_BUBBLE_CONTRAST
+            and (
+                ordered[0] - ordered[1] >= ID_AMBIGUITY_MARGIN
+                or ordered[0] >= ordered[1] * 1.5
+            )
+        )
+        if not has_clear_mark:
             digits.append("?")
             is_valid = False
         else:
+            clear_mark_count += 1
             digits.append(str(int(np.argmax(contrasts))))
+    # Empty identification fields are common on practice sheets. Return an
+    # empty value for a fully blank block so it is not reported as ??????;
+    # keep '?' for partially filled or genuinely ambiguous digits.
+    if clear_mark_count == 0:
+        return "", True, min(confidences, default=0.0)
     return "".join(digits), is_valid, min(confidences, default=0.0)
 
 
@@ -232,8 +244,15 @@ def extract_all_data(
             answer_confidence[question] = 0.0
             continue
         cy, centers = coords_map[question]
+        # A phone warp can leave a few pixels of local residual distortion.
+        # Search a small neighborhood around each printed center so light
+        # pencil fills are not lost just because the homography is imperfect.
         scores = [
-            _get_bubble_ink_contrast(gray, cx, cy, radius)
+            max(
+                _get_bubble_ink_contrast(gray, cx + dx, cy + dy, radius)
+                for dx in range(-6, 7, 2)
+                for dy in range(-6, 7, 2)
+            )
             for cx in centers
         ]
         ordered = sorted(scores, reverse=True)
@@ -244,13 +263,13 @@ def extract_all_data(
         marked = [
             OPTIONS[index]
             for index, score in enumerate(scores)
-            if score >= 18 and score >= strongest * 0.35
+            if score >= BUBBLE_FILL_CONTRAST and score >= strongest * 0.35
         ]
         if len(marked) >= 2:
             answers[question] = marked
             needs_review = True
             warnings.append(f"Câu {question}: Tô nhiều đáp án ({', '.join(marked)})")
-        elif strongest >= MARKED_BUBBLE_CONTRAST:
+        elif strongest >= BUBBLE_FILL_CONTRAST:
             answers[question] = OPTIONS[int(np.argmax(scores))]
             if second >= 12:
                 needs_review = True
