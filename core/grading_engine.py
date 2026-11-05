@@ -33,17 +33,19 @@ def grade_submission(
         st_ans = student_answers.get(q_num)
 
         # 1. Bỏ trống
-        if st_ans is None or st_ans == "":
+        if st_ans is None or (isinstance(st_ans, str) and not st_ans.strip()):
             blank_count += 1
             is_correct = False
             disp_st = "Trống"
 
         # 2. Tô nhiều ô
-        elif isinstance(st_ans, (list, tuple)):
+        elif isinstance(st_ans, (list, tuple, set)):
             multiple_count += 1
             wrong_count += 1
             is_correct = False
-            disp_st = ",".join(st_ans)
+            # OMR normally returns strings, but defensive conversion keeps
+            # malformed/manual data from crashing the whole batch.
+            disp_st = ",".join(str(answer).strip().upper() for answer in st_ans)
 
         # 3. Tô 1 ô
         else:

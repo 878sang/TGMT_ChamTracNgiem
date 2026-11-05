@@ -496,14 +496,6 @@ def _warp_portrait(
 
 
 def align_paper(image_input) -> Tuple[bool, Optional[np.ndarray], str]:
-    """
-    Hàm thực hiện Tiền xử lý và Căn chỉnh phối cảnh (Perspective Transform):
-      1. Đọc ảnh đầu vào
-      2. Chuyển Grayscale
-      3. Tìm 4 Marker định vị hoặc viền mép giấy rồi cắt và nắn phẳng phiếu
-      4. Warp Perspective về kích thước chuẩn của layout đang hoạt động
-    Trả về: (thành_công: bool, ảnh_chuẩn: np.ndarray, thông_báo: str)
-    """
     if isinstance(image_input, str):
         img = imread_utf8(image_input)
         if img is None:
@@ -512,8 +504,6 @@ def align_paper(image_input) -> Tuple[bool, Optional[np.ndarray], str]:
         img = image_input.copy()
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img.copy()
-
-    # Bước 1: Ưu tiên phát hiện 4 Marker định vị chuẩn
     marker_pts = find_fiducial_markers(gray)
     if marker_pts is not None and len(marker_pts) == 4:
         aligned, is_landscape, was_reversed = _warp_portrait(img, marker_pts, use_markers=True)
@@ -527,8 +517,6 @@ def align_paper(image_input) -> Tuple[bool, Optional[np.ndarray], str]:
         if is_landscape:
             return True, aligned, "Căn chỉnh thành công bằng 4 Marker; đã tự xoay ảnh chụp ngang."
         return True, aligned, "Căn chỉnh thành công bằng 4 Marker định vị góc."
-
-    # Bước 2: Dự phòng phát hiện viền tờ phiếu (Paper contour detection)
     paper_pts = find_paper_contour(gray)
     if paper_pts is not None and len(paper_pts) == 4:
         aligned, is_landscape, was_reversed = _warp_portrait(img, paper_pts, use_markers=False)

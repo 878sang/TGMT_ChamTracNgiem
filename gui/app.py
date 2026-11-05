@@ -62,15 +62,15 @@ class OMRGradingApp(ctk.CTk):
         self.style.theme_use("clam")
         self.style.configure(
             "Treeview",
-            font=("Segoe UI", 12),
-            rowheight=32,
+            font=("Segoe UI", 14),
+            rowheight=36,
             background="#FFFFFF",
             fieldbackground="#FFFFFF",
             foreground="#202020"
         )
         self.style.configure(
             "Treeview.Heading",
-            font=("Segoe UI", 12, "bold"),
+            font=("Segoe UI", 13, "bold"),
             background="#2B5B84",
             foreground="#FFFFFF",
             relief="flat"
@@ -80,23 +80,24 @@ class OMRGradingApp(ctk.CTk):
 
     def _build_ui(self):
         # 1. Header Bar
-        header_frame = ctk.CTkFrame(self, height=65, corner_radius=0)
+        header_frame = ctk.CTkFrame(self, height=78, corner_radius=0)
         header_frame.pack(fill="x", side="top")
+        header_frame.pack_propagate(False)
 
         title_lbl = ctk.CTkLabel(
             header_frame, 
             text="HỆ THỐNG NHẬN DIỆN VÀ CHẤM PHIẾU FORMTHPT50 (1-50 CÂU)",
             font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold")
         )
-        title_lbl.pack(side="left", padx=20, pady=(8, 0))
+        title_lbl.place(x=20, y=9)
 
         sub_lbl = ctk.CTkLabel(
             header_frame, 
-            text="Đồ án môn học: Thị giác máy tính (OpenCV) | Quy trình: 1. Tải phiếu lên ➔ 2. Đọc phiếu & Chấm điểm ➔ 3. Xuất kết quả", 
+            text="Đồ án Thị giác máy tính | Đọc và chấm phiếu trắc nghiệm bằng OpenCV",
             font=ctk.CTkFont(family="Segoe UI", size=12),
             text_color="gray"
         )
-        sub_lbl.place(x=20, y=36)
+        sub_lbl.place(x=20, y=44)
 
         self.theme_btn = ctk.CTkButton(
             header_frame, 
@@ -105,7 +106,7 @@ class OMRGradingApp(ctk.CTk):
             height=30,
             command=self._toggle_theme
         )
-        self.theme_btn.pack(side="right", padx=20, pady=15)
+        self.theme_btn.pack(side="right", padx=20, pady=20)
 
         # 2. Main Tabview
         self.tabview = ctk.CTkTabview(self, corner_radius=8)
@@ -133,11 +134,12 @@ class OMRGradingApp(ctk.CTk):
         ctk.CTkLabel(
             row_ctrl,
             text="Số câu (1-50):",
-            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold")
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold")
         ).pack(side="left", padx=(0, 5))
 
         self.entry_question_count = ctk.CTkEntry(
-            row_ctrl, width=58, height=32, justify="center"
+            row_ctrl, width=64, height=36, justify="center",
+            font=ctk.CTkFont(family="Segoe UI", size=14)
         )
         self.entry_question_count.insert(0, str(self.total_questions))
         self.entry_question_count.bind(
@@ -150,7 +152,8 @@ class OMRGradingApp(ctk.CTk):
             row_ctrl,
             text="Áp dụng",
             width=70,
-            height=32,
+            height=36,
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             command=lambda: self._on_question_count_changed(self.entry_question_count.get()),
         )
         self.btn_apply_question_count.pack(side="left", padx=(0, 10))
@@ -165,7 +168,8 @@ class OMRGradingApp(ctk.CTk):
         self.entry_key = ctk.CTkEntry(
             row_ctrl, 
             placeholder_text="Nhập chuỗi đáp án (VD: 'A B C D...' hoặc '1:A 2:B...')",
-            height=32
+            height=36,
+            font=ctk.CTkFont(family="Segoe UI", size=13)
         )
         self.entry_key.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
@@ -173,7 +177,8 @@ class OMRGradingApp(ctk.CTk):
             row_ctrl, 
             text="Lưu đáp án", 
             width=95, 
-            height=32,
+            height=36,
+            font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             command=self._apply_answer_key_from_entry
         )
         btn_apply_key.pack(side="left", padx=3)
@@ -371,15 +376,15 @@ class OMRGradingApp(ctk.CTk):
         self.tree_results.heading("Blank", text="Trống")
         self.tree_results.heading("Status", text="Trạng thái")
 
-        self.tree_results.column("STT", width=40, anchor="center")
-        self.tree_results.column("SBD", width=95, anchor="center")
-        self.tree_results.column("ExamCode", width=75, anchor="center")
-        self.tree_results.column("FileName", width=155, anchor="w")
-        self.tree_results.column("Score", width=68, anchor="center")
-        self.tree_results.column("Correct", width=72, anchor="center")
-        self.tree_results.column("Wrong", width=52, anchor="center")
-        self.tree_results.column("Blank", width=58, anchor="center")
-        self.tree_results.column("Status", width=72, anchor="center")
+        self.tree_results.column("STT", width=36, anchor="center", stretch=False)
+        self.tree_results.column("SBD", width=78, anchor="center", stretch=False)
+        self.tree_results.column("ExamCode", width=58, anchor="center", stretch=False)
+        self.tree_results.column("FileName", width=125, anchor="w", stretch=True)
+        self.tree_results.column("Score", width=60, anchor="center", stretch=False)
+        self.tree_results.column("Correct", width=75, anchor="center", stretch=False)
+        self.tree_results.column("Wrong", width=45, anchor="center", stretch=False)
+        self.tree_results.column("Blank", width=50, anchor="center", stretch=False)
+        self.tree_results.column("Status", width=76, anchor="center", stretch=False)
         self.tree_results.tag_configure("success", foreground="#087443")
         self.tree_results.tag_configure("error", foreground="#B42318")
         self.tree_results.tag_configure(
@@ -600,7 +605,8 @@ class OMRGradingApp(ctk.CTk):
         self.camera_frame = None
         self.camera_window = ctk.CTkToplevel(self)
         self.camera_window.title("Quét phiếu bằng camera")
-        self.camera_window.geometry("820x650")
+        # Leave enough vertical space for the live image and the action buttons.
+        self.camera_window.geometry("820x720")
         self.camera_window.resizable(False, False)
         self.camera_window.transient(self)
         self.camera_window.grab_set()
@@ -609,7 +615,7 @@ class OMRGradingApp(ctk.CTk):
             self.camera_window,
             text="Đang khởi động camera...",
             width=780,
-            height=540,
+            height=500,
         )
         self.camera_preview.pack(padx=15, pady=(15, 8))
 
@@ -643,7 +649,7 @@ class OMRGradingApp(ctk.CTk):
             self.camera_frame = frame
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(rgb)
-            pil_img.thumbnail((780, 540), Image.Resampling.LANCZOS)
+            pil_img.thumbnail((780, 500), Image.Resampling.LANCZOS)
             camera_img = ctk.CTkImage(
                 light_image=pil_img, dark_image=pil_img, size=pil_img.size
             )
