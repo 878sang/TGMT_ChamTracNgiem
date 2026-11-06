@@ -12,7 +12,7 @@ from typing import Any, Dict
 class Submission:
     """Kết quả xử lý và chấm điểm của một học sinh"""
     submission_id: str
-    student_id: str = ""                # Mã học sinh (lấy từ tên file hoặc SBD)
+    student_id: str = ""                # Mã học sinh đọc từ các ô SBD trên phiếu
     student_name: str = ""
     exam_code: str = ""                 # Mã đề thi đọc từ phiếu
     image_path: str = ""                # Đường dẫn file ảnh gốc

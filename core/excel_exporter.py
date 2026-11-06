@@ -76,7 +76,7 @@ def export_exam_results_to_excel(
             row_fill = fill_stripe if is_stripe else None
 
             stt = row_idx - 2
-            st_id = sub.student_id or sub.submission_id
+            st_id = sub.student_id or ""
             fname = os.path.basename(sub.image_path) if sub.image_path else ""
             
             if sub.score >= 8.0:
@@ -162,7 +162,7 @@ def export_exam_results_to_excel(
         # Từng học sinh
         for row_idx, sub in enumerate(submissions, start=3):
             stt = row_idx - 2
-            st_id = sub.student_id or sub.submission_id
+            st_id = sub.student_id or ""
             fname = os.path.basename(sub.image_path) if sub.image_path else ""
 
             ws2.cell(row=row_idx, column=1, value=stt).alignment = al_center

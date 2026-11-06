@@ -61,7 +61,9 @@ def process_single_submission(
 
     submission = Submission(
         submission_id=f"sub_{base_id}",
-        student_id=base_id,
+        # Student ID must come from the SBD bubbles on the sheet.  The file
+        # name is kept only for the internal submission ID and optional name.
+        student_id="",
         student_name=student_name,
         image_path=image_path
     )
@@ -143,6 +145,10 @@ def process_single_submission(
         submission.sbd = detected_sbd
         if detected_sbd and "?" not in detected_sbd and detected_sbd.isdigit():
             submission.student_id = detected_sbd
+        else:
+            # Never use the image filename as a student ID when SBD reading
+            # fails or is ambiguous.
+            submission.student_id = ""
             
         submission.exam_code = omr_data.get("exam_code", "")
         submission.needs_review = omr_data.get("needs_review", False)

@@ -875,7 +875,7 @@ class OMRGradingApp(ctk.CTk):
             except Exception as e:
                 sub = Submission(
                     submission_id=f"sub_err_{idx}",
-                    student_id=os.path.splitext(fname)[0],
+                    student_id="",
                     image_path=img_path,
                     status="Lỗi",
                     error_message=f"Lỗi: {str(e)}"
@@ -898,7 +898,7 @@ class OMRGradingApp(ctk.CTk):
         self.lbl_progress.configure(text=text)
 
     def _add_result_row_to_table(self, stt: int, sub: Submission):
-        st_id = sub.student_id or sub.submission_id
+        st_id = sub.student_id or ""
         fname = os.path.basename(sub.image_path)
         score_str = f"{sub.score:.2f}" if sub.status != "Lỗi" else "0.00"
         status_tag = "error" if sub.status == "Lỗi" else "success"
@@ -1004,7 +1004,7 @@ class OMRGradingApp(ctk.CTk):
     @staticmethod
     def _format_detected_digits(value: str) -> str:
         if not value or not value.strip("?"):
-            return "Chưa đọc"
+            return ""
         return value
 
     def _refresh_submission_choices(self):
