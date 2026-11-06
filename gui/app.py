@@ -10,7 +10,6 @@ import os
 import sys
 import glob
 import threading
-from datetime import datetime
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import cv2
@@ -24,7 +23,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from core.models import Submission
-from core.cv_utils import imread_utf8, imwrite_utf8
+from core.cv_utils import imread_utf8
 from core.grading_engine import parse_answer_string, generate_sample_answer_key
 from core.exam_processor import process_single_submission
 from core.excel_exporter import export_exam_results_to_excel
@@ -243,16 +242,6 @@ class OMRGradingApp(ctk.CTk):
 
         btn_row2 = ctk.CTkFrame(left_box, fg_color="transparent")
 
-        # Mở webcam để quét phiếu
-        ctk.CTkButton(
-            btn_row2,
-            text="📷 Quét bằng camera",
-            width=120,
-            height=28,
-            fg_color="#2E86AB",
-            hover_color="#1B4F72",
-            command=self._action_camera_scan,
-        ).pack(side="left", padx=5)
         btn_row2.pack(fill="x", padx=10, pady=(2, 6))
 
         ctk.CTkButton(
@@ -585,110 +574,6 @@ class OMRGradingApp(ctk.CTk):
                 new_count += 1
         self._refresh_image_list()
         messagebox.showinfo("Thêm thư mục", f"Đã quét và thêm {new_count} ảnh từ thư mục:\n{dir_path}")
-
-    def _action_camera_scan(self):
-        """Open the computer camera and capture a form into the input list."""
-        if getattr(self, "camera_window", None) is not None and self.camera_window.winfo_exists():
-            self.camera_window.focus_force()
-            return
-
-        camera = cv2.VideoCapture(0)
-        if not camera.isOpened():
-            camera.release()
-            messagebox.showerror(
-                "Không mở được camera",
-                "Không thể truy cập camera máy tính. Vui lòng kiểm tra camera và quyền truy cập.",
-            )
-            return
-
-        self.camera_capture = camera
-        self.camera_frame = None
-        self.camera_window = ctk.CTkToplevel(self)
-        self.camera_window.title("Quét phiếu bằng camera")
-        # Leave enough vertical space for the live image and the action buttons.
-        self.camera_window.geometry("820x720")
-        self.camera_window.resizable(False, False)
-        self.camera_window.transient(self)
-        self.camera_window.grab_set()
-
-        self.camera_preview = ctk.CTkLabel(
-            self.camera_window,
-            text="Đang khởi động camera...",
-            width=780,
-            height=500,
-        )
-        self.camera_preview.pack(padx=15, pady=(15, 8))
-
-        controls = ctk.CTkFrame(self.camera_window, fg_color="transparent")
-        controls.pack(fill="x", padx=15, pady=(0, 15))
-        ctk.CTkButton(
-            controls,
-            text="📸 Chụp ảnh phiếu",
-            width=170,
-            height=36,
-            command=self._capture_camera_frame,
-        ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(
-            controls,
-            text="Đóng camera",
-            width=120,
-            height=36,
-            fg_color="#6B7280",
-            hover_color="#4B5563",
-            command=self._close_camera,
-        ).pack(side="left")
-        self.camera_window.protocol("WM_DELETE_WINDOW", self._close_camera)
-        self._update_camera_preview()
-
-    def _update_camera_preview(self):
-        """Read and display the next webcam frame without blocking Tkinter."""
-        if getattr(self, "camera_window", None) is None or not self.camera_window.winfo_exists():
-            return
-        ok, frame = self.camera_capture.read()
-        if ok:
-            self.camera_frame = frame
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            pil_img = Image.fromarray(rgb)
-            pil_img.thumbnail((780, 500), Image.Resampling.LANCZOS)
-            camera_img = ctk.CTkImage(
-                light_image=pil_img, dark_image=pil_img, size=pil_img.size
-            )
-            self.camera_preview.configure(image=camera_img, text="")
-            self.camera_preview.image = camera_img
-        self.camera_window.after(30, self._update_camera_preview)
-
-    def _capture_camera_frame(self):
-        if self.camera_frame is None:
-            messagebox.showwarning("Chưa có hình ảnh", "Camera chưa lấy được khung hình. Vui lòng thử lại.")
-            return
-
-        capture_dir = os.path.join(PROJECT_ROOT, "data", "camera_captures")
-        os.makedirs(capture_dir, exist_ok=True)
-        filename = f"camera_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
-        save_path = os.path.join(capture_dir, filename)
-        if not imwrite_utf8(save_path, self.camera_frame):
-            messagebox.showerror("Lỗi lưu ảnh", "Không thể lưu ảnh chụp từ camera.")
-            return
-
-        norm_path = os.path.abspath(save_path)
-        if norm_path not in self.image_files:
-            self.image_files.append(norm_path)
-        self._refresh_image_list()
-        self._update_progress_status(f"Đã quét phiếu bằng camera: {filename}")
-        self._close_camera()
-
-    def _close_camera(self):
-        if getattr(self, "camera_capture", None) is not None:
-            self.camera_capture.release()
-            self.camera_capture = None
-        if getattr(self, "camera_window", None) is not None:
-            try:
-                self.camera_window.grab_release()
-                self.camera_window.destroy()
-            except tk.TclError:
-                pass
-            self.camera_window = None
-        self.camera_frame = None
 
     def _action_remove_selected_image(self):
         selected_items = self.tree_images.selection()
